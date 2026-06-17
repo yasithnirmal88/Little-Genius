@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Little Genius - Science Learning for Kids</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f0f4ff;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+        #root {
+            min-height: 100vh;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        // ─── INITIAL DATA STORE ───────────────────────────────────────────────────────
+        const INIT_MODULES = [
+          {id:1,tier:1,title:"Module 1",emoji:"🌌",stars:3,locked:false,domains:["Space","Astronomy"],status:"published"},
+          {id:2,tier:1,title:"Module 2",emoji:"🦋",stars:1,locked:false,domains:["Biology","Animals"],status:"published"},
+          {id:3,tier:2,title:"Module 3",emoji:"⚗️",stars:0,locked:false,domains:["Chemistry","Physics"],status:"published"},
+          {id:4,tier:2,title:"Module 4",emoji:"🌿",stars:0,locked:true,domains:["Earth Science","Weather"],status:"published"},
+          {id:5,tier:3,title:"Module 5",emoji:"🦕",stars:0,locked:true,domains:["Dinosaurs","Fossils"],status:"draft"},
+          {id:6,tier:3,title:"Module 6",emoji:"⚡",stars:0,locked:true,domains:["Physics","Technology"],status:"draft"},
+          {id:7,tier:4,title:"Module 7",emoji:"🌊",stars:0,locked:true,domains:["Ocean Science","Biology"],status:"draft"},
+          {id:8,tier:4,title:"Module 8",emoji:"🤖",stars:0,locked:true,domains:["Technology","Robotics"],status:"draft"},
+        ];
+        const INIT_SHORTS = [
+          {id:1,title:"Why is Space Dark?",domain:"Space & Astronomy",duration:"0:42",module:1,star:1,status:"published"},
+          {id:2,title:"How do Butterflies Taste?",domain:"Animals",duration:"0:38",module:2,star:1,status:"published"},
+          {id:3,title:"What is Electricity?",domain:"Physics",duration:"0:45",module:3,star:1,status:"published"},
+          {id:4,title:"How Black Holes Form",domain:"Space & Astronomy",duration:"0:55",module:1,star:2,status:"published"},
+          {id:5,title:"The Water Cycle",domain:"Earth Science",duration:"0:40",module:4,star:1,status:"draft"},
+        ];
+        const INIT_USERS = [
+          {id:1,username:"CosmicNebula42",email:"cosmic@gmail.com",password:"password123",rank:"Science Cadet",xp:1540,streak:9,modules:2,status:"active",joined:"2026-01-10"},
+          {id:2,username:"AtomSmasher99",email:"atom@gmail.com",password:"password123",rank:"Spark Explorer",xp:3200,streak:14,modules:5,status:"active",joined:"2026-01-08"},
+          {id:3,username:"BioRanger77",email:"bio@gmail.com",password:"password123",rank:"Science Cadet",xp:980,streak:2,modules:1,status:"active",joined:"2026-02-01"},
+          {id:4,username:"QuantumKid55",email:"quantum@gmail.com",password:"password123",rank:"Atom Scout",xp:4750,streak:21,modules:7,status:"suspended",joined:"2025-12-15"},
+          {id:5,username:"StarDuster11",email:"star@gmail.com",password:"password123",rank:"Science Cadet",xp:200,streak:0,modules:0,status:"active",joined:"2026-03-01"},
+        ];
+        const DOMAINS = ["Space & Astronomy","Biology","Chemistry","Physics","Earth Science","Weather","Human Body","Animals","Quantum Physics","Technology & Robotics","Ocean Science","Dinosaurs & Fossils"];
+        const TIER_COLORS = {1:"#667eea",2:"#e17055",3:"#00b894",4:"#fd79a8"};
+        const CANVAS_W = 320;
+        const NODE_STEP = 110;
+
+        // ─── SHARED COMPONENTS ───────────────────────────────────────────────────────
+        const Badge = ({color,children}) => (
+          <span style={{background:color+"22",color,border:`1px solid ${color}44`,borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:700}}>{children}</span>
+        );
+        const Btn = ({onClick,color="#667eea",children,outline,style={}}) => (
+          <button onClick={onClick} style={{background:outline?"transparent":color,color:outline?color:"white",border:`2px solid ${color}`,borderRadius:10,padding:"8px 14px",fontWeight:700,fontSize:12,cursor:"pointer",...style}}>{children}</button>
+        );
+        const Input = ({value,onChange,placeholder,style={}}) => (
+          <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+            style={{border:"1.5px solid #e0e0e0",borderRadius:10,padding:"10px 12px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box",...style}}/>
+        );
+        const Select = ({value,onChange,options,style={}}) => (
+          <select value={value} onChange={e=>onChange(e.target.value)}
+            style={{border:"1.5px solid #e0e0e0",borderRadius:10,padding:"10px 12px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box",background:"white",...style}}>
+            {options.map(o=><option key={o.value??o} value={o.value??o}>{o.label??o}</option>)}
+          </select>
+        );
+
+        // ─── LOGIN SCREEN ─────────────────────────────────────────────────────────────
+        function LoginScreen({onLogin, users, setUsers}) {
+          const [mode, setMode] = React.useState("login"); // "login" | "signup" | "forgot" | "resetSim"
+          const [email, setEmail] = React.useState("");
+          const [username, setUsername] = React.useState("");
+          const [password, setPassword] = React.useState("");
+          const [confirmPassword, setConfirmPassword] = React.useState("");
+          const [resetCode, setResetCode] = React.useState("L-G-99");
+          const [newPassword, setNewPassword] = React.useState("");
+          const [confirmNewPassword, setConfirmNewPassword] = React.useState("");
+          const [err, setErr] = React.useState("");
+          const [success, setSuccess] = React.useState("");
+
+          const changeMode = (m) => {
+            setMode(m);
+            setErr("");
+            setSuccess("");
+            setPassword("");
+            setConfirmPassword("");
+            setNewPassword("");
+            setConfirmNewPassword("");
+          };
+
+          const handleLogin = () => {
+            setErr("");
+            if (!email.trim() || !password.trim()) {
+              return setErr("Please enter both email and password.");
+            }
+            
+            if (email.toLowerCase().trim() === "slchaves0000@gmail.com" && password === "yasi12345") {
+              return onLogin("admin", { username: "Admin", email: "slchaves0000@gmail.com" });
+            }
+
+            const foundUser = users.find(u => u.email.toLowerCase().trim() === email.toLowerCase().trim());
+            if (foundUser) {
+              if (foundUser.password === password) {
+                if (foundUser.status === "suspended") {
+                  return setErr("Your account has been suspended. Please contact admin.");
+                }
+                return onLogin("user", foundUser);
+              }
+            }
+            setErr("Invalid email or password.");
+          };
+
+          const handleSignUp = () => {
+            setErr("");
+            if (!username.trim() || !email.trim() || !password.trim()) {
+              return setErr("All fields are required.");
+            }
+            if (username.trim().length < 3) {
+              return setErr("Username must be at least 3 characters.");
+            }
+            if (!email.includes("@") || !email.includes(".")) {
+              return setErr("Please enter a valid email address.");
+            }
+            if (password.length < 6) {
+              return setErr("Password must be at least 6 characters.");
+            }
+            if (password !== confirmPassword) {
+              return setErr("Passwords do not match.");
+            }
+            
+            if (email.toLowerCase().trim() === "slchaves0000@gmail.com" || 
+                users.some(u => u.email.toLowerCase().trim() === email.toLowerCase().trim())) {
+              return setErr("This email is already registered.");
+            }
+
+            const newUser = {
+              id: Date.now(),
+              username: username.trim(),
+              email: email.toLowerCase().trim(),
+              password: password,
+              rank: "Science Cadet",
+              xp: 0,
+              streak: 1,
+              modules: 0,
+              status: "active",
+              joined: new Date().toISOString().split("T")[0]
+            };
+
+            setUsers(prev => [...prev, newUser]);
+            onLogin("user", newUser);
+          };
+
+          const handleForgotPassword = () => {
+            setErr("");
+            if (!email.trim()) {
+              return setErr("Please enter your email.");
+            }
+            if (!email.includes("@") || !email.includes(".")) {
+              return setErr("Please enter a valid email address.");
+            }
+
+            const isUser = users.some(u => u.email.toLowerCase().trim() === email.toLowerCase().trim());
+            const isAdmin = email.toLowerCase().trim() === "slchaves0000@gmail.com";
+
+            if (!isUser && !isAdmin) {
+              return setErr("We couldn't find an account with that email.");
+            }
+
+            setSuccess(`A reset magic code has been sent to ${email}!`);
+            setTimeout(() => {
+              setMode("resetSim");
+              setSuccess("");
+            }, 1500);
+          };
+
+          const handleResetSim = () => {
+            setErr("");
+            if (!resetCode.trim() || !newPassword.trim() || !confirmNewPassword.trim()) {
+              return setErr("Please enter the code and new password.");
+            }
+            if (resetCode !== "L-G-99") {
+              return setErr("Invalid verification code.");
+            }
+            if (newPassword.length < 6) {
+              return setErr("Password must be at least 6 characters.");
+            }
+            if (newPassword !== confirmNewPassword) {
+              return setErr("Passwords do not match.");
+            }
+
+            if (email.toLowerCase().trim() === "slchaves0000@gmail.com") {
+              setSuccess("Admin password reset simulated! Please login with standard admin credentials.");
+              setTimeout(() => {
+                changeMode("login");
+              }, 3000);
+            } else {
+              setUsers(prev => prev.map(u => u.email.toLowerCase().trim() === email.toLowerCase().trim() ? { ...u, password: newPassword } : u));
+              setSuccess("Success! Your password has been updated.");
+              setTimeout(() => {
+                changeMode("login");
+              }, 2000);
+            }
+          };
+
+          return (
+            <div style={{
+              width: "100%",
+              minHeight: "100vh",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "clamp(16px, 4vw, 40px)",
+              background: "linear-gradient(160deg,#667eea22,#e1705522)",
+            }}>
+              <div style={{ fontSize: "clamp(40px, 10vw, 64px)", marginBottom: 8, filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.1))" }}>🔬</div>
+              <div style={{ 
+                fontWeight: 800, 
+                fontSize: "clamp(22px, 5vw, 34px)", 
+                background: "linear-gradient(90deg,#667eea,#e17055)", 
+                WebkitBackgroundClip: "text", 
+                WebkitTextFillColor: "transparent", 
+                marginBottom: 4,
+                letterSpacing: -0.5
+              }}>
+                Little Genius
+              </div>
+              <div style={{ color: "#aaa", fontSize: "clamp(12px, 2vw, 14px)", marginBottom: "clamp(16px, 3vw, 28px)", fontWeight: 500 }}>
+                Science Learning for Kids 5–9
+              </div>
+
+              <div style={{
+                width: "min(92%, 450px)",
+                background: "white",
+                borderRadius: 20,
+                boxShadow: "0 10px 25px rgba(102, 126, 234, 0.08)",
+                border: "1px solid rgba(224, 224, 224, 0.6)",
+                padding: "clamp(16px, 3vw, 24px)",
+                boxSizing: "border-box"
+              }}>
+                {(mode === "login" || mode === "signup") && (
+                  <div style={{
+                    display: "flex",
+                    background: "#f1f3f9",
+                    borderRadius: 12,
+                    padding: 4,
+                    marginBottom: 20
+                  }}>
+                    <button 
+                      onClick={() => changeMode("login")}
+                      style={{
+                        flex: 1,
+                        padding: "8px 0",
+                        border: "none",
+                        borderRadius: 9,
+                        background: mode === "login" ? "white" : "transparent",
+                        color: mode === "login" ? "#2d3436" : "#636e72",
+                        fontWeight: 700,
+                        fontSize: 13,
+                        cursor: "pointer",
+                        boxShadow: mode === "login" ? "0 2px 8px rgba(0,0,0,0.05)" : "none",
+                        transition: "all 0.2s"
+                      }}
+                    >
+                      Sign In
+                    </button>
+                    <button 
+                      onClick={() => changeMode("signup")}
+                      style={{
+                        flex: 1,
+                        padding: "8px 0",
+                        border: "none",
+                        borderRadius: 9,
+                        background: mode === "signup" ? "white" : "transparent",
+                        color: mode === "signup" ? "#2d3436" : "#636e72",
+                        fontWeight: 700,
+                        fontSize: 13,
+                        cursor: "pointer",
+                        boxShadow: mode === "signup" ? "0 2px 8px rgba(0,0,0,0.05)" : "none",
+                        transition: "all 0.2s"
+                      }}
+                    >
+                      Sign Up
+                    </button>
+                  </div>
+                )}
+
+                {mode === "login" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{ position: "relative" }}>
+                      <Input value={email} onChange={setEmail} placeholder="Email Address"/>
+                      <span style={{ position: "absolute", right: 12, top: 11, fontSize: 14 }}>📧</span>
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <input type="password" style={{ display: "none" }} />
+                      <Input value={password} onChange={setPassword} placeholder="Password" style={{ paddingRight: 35 }}/>
+                      <span style={{ position: "absolute", right: 12, top: 11, fontSize: 14 }}>🔒</span>
+                    </div>
+                    
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -4 }}>
+                      <button 
+                        onClick={() => changeMode("forgot")}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#667eea",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          padding: 0
+                        }}
+                      >
+                        Forgot Password?
+                      </button>
+                    </div>
+
+                    {err && <div style={{ color: "#e17055", fontSize: 12, textAlign: "center", fontWeight: 600 }}>⚠️ {err}</div>}
+                    
+                    <button 
+                      onClick={handleLogin} 
+                      style={{
+                        background: "linear-gradient(90deg,#667eea,#764ba2)",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 14,
+                        padding: 14,
+                        fontWeight: 700,
+                        fontSize: 15,
+                        cursor: "pointer",
+                        marginTop: 6,
+                        boxShadow: "0 4px 15px rgba(102, 126, 234, 0.2)"
+                      }}
+                    >
+                      Let's Go! 🚀
+                    </button>
+                  </div>
+                )}
+
+                {mode === "signup" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{ position: "relative" }}>
+                      <Input value={username} onChange={setUsername} placeholder="Kid's Username"/>
+                      <span style={{ position: "absolute", right: 12, top: 11, fontSize: 14 }}>👤</span>
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <Input value={email} onChange={setEmail} placeholder="Email Address"/>
+                      <span style={{ position: "absolute", right: 12, top: 11, fontSize: 14 }}>📧</span>
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <Input value={password} onChange={setPassword} placeholder="Choose Password"/>
+                      <span style={{ position: "absolute", right: 12, top: 11, fontSize: 14 }}>🔒</span>
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <Input value={confirmPassword} onChange={setConfirmPassword} placeholder="Confirm Password"/>
+                      <span style={{ position: "absolute", right: 12, top: 11, fontSize: 14 }}>🛡️</span>
+                    </div>
+
+                    {err && <div style={{ color: "#e17055", fontSize: 12, textAlign: "center", fontWeight: 600 }}>⚠️ {err}</div>}
+
+                    <button 
+                      onClick={handleSignUp} 
+                      style={{
+                        background: "linear-gradient(90deg,#e17055,#ff7675)",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 14,
+                        padding: 14,
+                        fontWeight: 700,
+                        fontSize: 15,
+                        cursor: "pointer",
+                        marginTop: 6,
+                        boxShadow: "0 4px 15px rgba(225, 112, 85, 0.2)"
+                      }}
+                    >
+                      Create Account ✨
+                    </button>
+                  </div>
+                )}
+
+                {mode === "forgot" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: "#2d3436", textAlign: "center", marginBottom: 4 }}>
+                      Reset Your Password 🔑
+                    </div>
+                    <div style={{ fontSize: 12, color: "#636e72", textAlign: "center", marginBottom: 8, lineHeight: 1.4 }}>
+                      Enter your registered email below, and we'll send you a password reset magic link.
+                    </div>
+
+                    <div style={{ position: "relative" }}>
+                      <Input value={email} onChange={setEmail} placeholder="Your Email Address"/>
+                      <span style={{ position: "absolute", right: 12, top: 11, fontSize: 14 }}>📧</span>
+                    </div>
+
+                    {err && <div style={{ color: "#e17055", fontSize: 12, textAlign: "center", fontWeight: 600 }}>⚠️ {err}</div>}
+                    {success && <div style={{ color: "#00b894", fontSize: 12, textAlign: "center", fontWeight: 600 }}>✨ {success}</div>}
+
+                    <button 
+                      onClick={handleForgotPassword} 
+                      style={{
+                        background: "linear-gradient(90deg,#667eea,#764ba2)",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 14,
+                        padding: 14,
+                        fontWeight: 700,
+                        fontSize: 15,
+                        cursor: "pointer",
+                        marginTop: 6,
+                        boxShadow: "0 4px 15px rgba(102, 126, 234, 0.2)"
+                      }}
+                    >
+                      Send Reset Link ✉️
+                    </button>
+
+                    <button 
+                      onClick={() => changeMode("login")}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "#636e72",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        marginTop: 8
+                      }}
+                    >
+                      ← Back to Sign In
+                    </button>
+                  </div>
+                )}
+
+                {mode === "resetSim" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: "#2d3436", textAlign: "center", marginBottom: 4 }}>
+                      Enter Magic Code 🧙‍♂️
+                    </div>
+                    <div style={{ fontSize: 11, color: "#00b894", background: "#00b89411", padding: 10, borderRadius: 10, textAlign: "center", marginBottom: 8, border: "1px solid #00b89433" }}>
+                      We've pre-filled the magic code we sent to: <b>{email}</b>
+                    </div>
+
+                    <div style={{ position: "relative" }}>
+                      <Input value={resetCode} onChange={setResetCode} placeholder="Magic Code (L-G-99)"/>
+                      <span style={{ position: "absolute", right: 12, top: 11, fontSize: 14 }}>🗝️</span>
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <Input value={newPassword} onChange={setNewPassword} placeholder="Enter New Password"/>
+                      <span style={{ position: "absolute", right: 12, top: 11, fontSize: 14 }}>🔒</span>
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <Input value={confirmNewPassword} onChange={setConfirmNewPassword} placeholder="Confirm New Password"/>
+                      <span style={{ position: "absolute", right: 12, top: 11, fontSize: 14 }}>🛡️</span>
+                    </div>
+
+                    {err && <div style={{ color: "#e17055", fontSize: 12, textAlign: "center", fontWeight: 600 }}>⚠️ {err}</div>}
+                    {success && <div style={{ color: "#00b894", fontSize: 12, textAlign: "center", fontWeight: 600 }}>✨ {success}</div>}
+
+                    <button 
+                      onClick={handleResetSim} 
+                      style={{
+                        background: "linear-gradient(90deg,#00b894,#00d2d3)",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 14,
+                        padding: 14,
+                        fontWeight: 700,
+                        fontSize: 15,
+                        cursor: "pointer",
+                        marginTop: 6,
+                        boxShadow: "0 4px 15px rgba(0, 184, 148, 0.2)"
+                      }}
+                    >
+                      Update Password 🎉
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ 
+                marginTop: "clamp(16px, 3vw, 24px)", 
+                padding: "clamp(10px, 2vw, 14px)", 
+                background: "white", 
+                borderRadius: 12, 
+                fontSize: "clamp(10px, 1.5vw, 12px)", 
+                color: "#888", 
+                textAlign: "left", 
+                width: "min(92%, 450px)", 
+                boxSizing: "border-box",
+                border: "1px dashed #ddd"
+              }}>
+                <div style={{ fontWeight: 700, color: "#667eea", marginBottom: 4 }}>💡 Demo accounts:</div>
+                • Admin: <b style={{ color: "#333" }}>slchaves0000@gmail.com</b> / <b style={{ color: "#333" }}>yasi12345</b><br/>
+                • Kid: <b style={{ color: "#333" }}>cosmic@gmail.com</b> / <b style={{ color: "#333" }}>password123</b>
+              </div>
+            </div>
+          );
+        }
+
+        // ─── USER APP ─────────────────────────────────────────────────────────────────
+        function StarRow({count,max=3}) {
+          return <div style={{display:"flex",gap:3,justifyContent:"center"}}>{Array.from({length:max}).map((_,i)=><span key={i} style={{fontSize:13}}>{i<count?"⭐":"☆"}</span>)}</div>;
+        }
+        function ModuleModal({mod,onClose}) {
+          const [tab,setTab]=React.useState("overview");
+          if(!mod) return null;
+          return (
+            <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"flex-end",zIndex:100}} onClick={onClose}>
+              <div style={{background:"white",borderRadius:"24px 24px 0 0",width:"100%",padding:20,maxHeight:"75%",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+                <div style={{width:40,height:4,background:"#ddd",borderRadius:2,margin:"0 auto 16px"}}/>
+                <div style={{fontWeight:700,fontSize:18,marginBottom:4}}>{mod.emoji} {mod.title}</div>
+                <StarRow count={mod.stars}/>
+                <div style={{display:"flex",gap:8,margin:"14px 0"}}>
+                  {["overview","stars","xp"].map(t=>(
+                    <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"8px 0",border:"none",borderRadius:10,background:tab===t?"#667eea":"#f0f0f0",color:tab===t?"white":"#555",fontWeight:600,fontSize:12,cursor:"pointer"}}>
+                      {t==="xp"?"XP & Rewards":t.charAt(0).toUpperCase()+t.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                {tab==="overview" && <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {["📹 Short video (30–60s)","🧠 5-Question Quiz","📹 Short video #2","🧠 5-Question Quiz","📹 Short video #3","🧠 8-Question Quiz + ⚔️ Science Battle"].map((s,i)=>(
+                    <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"10px 12px",background:i<(mod.stars*2)?"#f0fff4":"#fafafa",borderRadius:10,border:"1.5px solid "+(i<(mod.stars*2)?"#00b894":"#eee"),fontSize:13}}>
+                      <span>{i<(mod.stars*2)?"✅":"⭕"}</span><span>{s}</span>
+                    </div>
+                  ))}
+                </div>}
+                {tab==="stars" && <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {[["⭐ Star 1","Watch Short + 5-Question Quiz"],["⭐ Star 2","Watch Short + 5-Question Quiz"],["⭐ Star 3","Watch Short + 8-Question Quiz + Science Battle"]].map(([star,desc],i)=>(
+                    <div key={star} style={{background:i<mod.stars?"#fff9e6":"#fafafa",border:"1.5px solid "+(i<mod.stars?"#FFD700":"#eee"),borderRadius:12,padding:12}}>
+                      <div style={{fontWeight:700,color:i<mod.stars?"#f9ca24":"#aaa"}}>{star} {i<mod.stars?"✅":""}</div>
+                      <div style={{fontSize:13,color:"#636e72",marginTop:4}}>{desc}</div>
+                    </div>
+                  ))}
+                </div>}
+                {tab==="xp" && <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {[["Watch a Short","+ 10 XP"],["Pass Quiz (Stars 1–2)","+ 15 XP"],["Pass Quiz (Star 3)","+ 25 XP"],["Science Battle","+ 25 XP"],["Perfect Score","+ 10 XP"],["Daily Login","+ 5 XP/day"]].map(([a,x])=>(
+                    <div key={a} style={{display:"flex",justifyContent:"space-between",padding:"10px 14px",background:"#f8f8f8",borderRadius:10,fontSize:13}}>
+                      <span>{a}</span><span style={{fontWeight:700,color:"#00b894"}}>{x}</span>
+                    </div>
+                  ))}
+                </div>}
+                <button onClick={onClose} style={{marginTop:16,width:"100%",padding:14,background:"linear-gradient(90deg,#667eea,#764ba2)",color:"white",border:"none",borderRadius:14,fontWeight:700,fontSize:15,cursor:"pointer"}}>
+                  {mod.stars===0?"Start Module 🚀":mod.stars===3?"Review 📖":"Continue ▶"}
+                </button>
+              </div>
+            </div>
+          );
+        }
+        function PathTab({modules,onModuleSelect,currentUser}) {
+          const totalH = modules.length*NODE_STEP+120;
+          const pts = modules.map((m,i)=>({x:(m.x??((i%2===0?35:65)))/100*(CANVAS_W-80)+20, y:i*NODE_STEP+70}));
+          const makePath = (pts) => pts.reduce((d,p,i)=>{
+            if(i===0) return `M${p.x},${p.y}`;
+            const prev=pts[i-1], cx=(prev.x+p.x)/2;
+            return d+` C${cx},${prev.y} ${cx},${p.y} ${p.x},${p.y}`;
+          },"");
+          const donePts = pts.slice(0, Math.max(1, modules.filter(m=>m.stars>0).length+1));
+          const nodeX = [35,65,45,25,55,75,50,30];
+          const realPts = modules.map((m,i)=>({x:nodeX[i%nodeX.length]/100*(CANVAS_W-80)+20, y:i*NODE_STEP+70}));
+          const donePts2 = realPts.slice(0, Math.max(1, modules.filter(m=>m.stars>0).length+1));
+
+          const xp = currentUser ? currentUser.xp.toLocaleString() : "0";
+          const streak = currentUser ? currentUser.streak : "0";
+          const rank = currentUser ? currentUser.rank : "Science Cadet";
+
+          return (
+            <div style={{flex:1,overflowY:"auto",background:"#f0f4ff"}}>
+              <div style={{background:"linear-gradient(135deg,#667eea,#764ba2)",margin:12,borderRadius:16,padding:"12px 16px",color:"white",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><div style={{fontSize:11,opacity:.8}}>Rank</div><div style={{fontWeight:700,fontSize:14}}>🎖️ {rank}</div></div>
+                <div><div style={{fontSize:11,opacity:.8}}>XP</div><div style={{fontWeight:700,fontSize:18}}>{xp}</div></div>
+                <div><div style={{fontSize:11,opacity:.8}}>🔥 Streak</div><div style={{fontWeight:700,fontSize:18}}>{streak}</div></div>
+              </div>
+              <div style={{position:"relative",width:"100%"}}>
+                <svg width="100%" viewBox={`0 0 ${CANVAS_W} ${totalH}`} style={{display:"block"}}>
+                  {[...new Set(modules.map(m=>m.tier))].map(t=>{
+                    const si=modules.findIndex(m=>m.tier===t), ei=modules.map(m=>m.tier).lastIndexOf(t);
+                    return <rect key={t} x={0} y={si*NODE_STEP+20} width={CANVAS_W} height={(ei-si)*NODE_STEP+100} fill={(TIER_COLORS[t]||"#aaa")+"11"} rx={12}/>;
+                  })}
+                  {[...new Set(modules.map(m=>m.tier))].map(t=>{
+                    const si=modules.findIndex(m=>m.tier===t);
+                    return <text key={t} x={CANVAS_W/2} y={si*NODE_STEP+34} textAnchor="middle" fontSize={10} fontWeight="700" fill={TIER_COLORS[t]||"#aaa"} letterSpacing={1}>— TIER {t} —</text>;
+                  })}
+                  <path d={makePath(realPts)} fill="none" stroke="#dde3f0" strokeWidth={14} strokeLinecap="round"/>
+                  <path d={makePath(donePts2)} fill="none" stroke="#A29BFE" strokeWidth={14} strokeLinecap="round"/>
+                  <path d={makePath(donePts2)} fill="none" stroke="white" strokeWidth={4} strokeLinecap="round" strokeDasharray="8 14" opacity={0.5}/>
+                  {modules.map((mod,i)=>{
+                    const x=realPts[i].x, y=realPts[i].y;
+                    const cs=["#FF6B6B","#FF9F43","#48DBFB","#1DD1A1","#A29BFE","#FD79A8","#FDCB6E","#6C5CE7"];
+                    const bg=mod.locked?"#b2bec3":cs[i%cs.length];
+                    const isActive=!mod.locked&&mod.stars<3;
+                    return (
+                      <g key={mod.id} onClick={()=>!mod.locked&&onModuleSelect(mod)} style={{cursor:mod.locked?"not-allowed":"pointer"}}>
+                        {isActive&&<circle cx={x} cy={y} r={38} fill={bg} opacity={0.15}/>}
+                        <circle cx={x} cy={y+4} r={28} fill="#00000022"/>
+                        <circle cx={x} cy={y} r={28} fill={bg} stroke="white" strokeWidth={3}/>
+                        <text x={x} y={y+1} textAnchor="middle" dominantBaseline="middle" fontSize={mod.locked?18:20}>{mod.locked?"🔒":mod.stars===3?"✅":mod.emoji}</text>
+                        {[0,1,2].map(s=><text key={s} x={x-12+s*12} y={y+42} textAnchor="middle" fontSize={11} opacity={mod.locked?.4:1}>{s<mod.stars?"⭐":"☆"}</text>)}
+                        <text x={x} y={y+58} textAnchor="middle" fontSize={10} fontWeight="600" fill="#636e72">{mod.title}</text>
+                        {isActive&&<circle cx={x} cy={y} r={30} fill="none" stroke={bg} strokeWidth={2} opacity={0.5} strokeDasharray="4 4"/>}
+                      </g>
+                    );
+                  })}
+                </svg>
+                <div style={{textAlign:"center",paddingBottom:20,color:"#aaa",fontSize:13}}>🔒 Keep going to unlock more!</div>
+              </div>
+            </div>
+          );
+        }
+        function UserApp({modules,shorts,onLogout,currentUser}) {
+          const [tab,setTab]=React.useState("path");
+          const [selMod,setSelMod]=React.useState(null);
+          const [voted,setVoted]=React.useState(null);
+          const TABS=[{id:"path",icon:"🗺️",label:"Path"},{id:"shorts",icon:"▶️",label:"Shorts"},{id:"battle",icon:"⚔️",label:"Battle"},{id:"ranks",icon:"🏅",label:"Ranks"},{id:"profile",icon:"👤",label:"Me"}];
+          const pubModules = modules.filter(m=>m.status==="published");
+          const pubShorts = shorts.filter(s=>s.status==="published");
+          return (
+            <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
+              <div style={{background:"white",padding:"clamp(10px, 2vw, 16px) clamp(12px, 3vw, 24px)",borderBottom:"1px solid #eee",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+                <div style={{fontWeight:800,fontSize:"clamp(16px, 3vw, 20px)",background:"linear-gradient(90deg,#667eea,#e17055)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>🔬 Little Genius</div>
+                <div style={{display:"flex",gap:6}}>
+                  <span style={{background:"#fff9e6",border:"1.5px solid #FFD700",borderRadius:20,padding:"3px 8px",fontWeight:700,color:"#f9ca24",fontSize:12}}>⭐ {currentUser ? currentUser.xp.toLocaleString() : "0"}</span>
+                  <span style={{background:"#fff5f0",border:"1.5px solid #e17055",borderRadius:20,padding:"3px 8px",fontWeight:700,color:"#e17055",fontSize:12}}>🔥 {currentUser ? currentUser.streak : "0"}</span>
+                </div>
+              </div>
+              <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column"}}>
+                {tab==="path"&&<PathTab modules={pubModules} onModuleSelect={setSelMod} currentUser={currentUser}/>}
+                {tab==="shorts"&&(
+                  <div style={{padding:"clamp(12px, 2vw, 24px)",display:"flex",flexDirection:"column",gap:"clamp(10px, 1.5vw, 16px)"}}>
+                    <div style={{fontWeight:700,fontSize:"clamp(14px, 2.5vw, 18px)"}}>⚡ Science Shorts</div>
+                    {pubShorts.map(s=>(
+                      <div key={s.id} style={{background:"linear-gradient(135deg,#2d3436,#636e72)",borderRadius:"clamp(12px, 2vw, 16px)",padding:"clamp(12px, 2vw, 20px)",color:"white"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+                          <Badge color="#A29BFE">{s.domain}</Badge>
+                          <Badge color="#FFD700">+10 XP</Badge>
+                        </div>
+                        <div style={{fontWeight:700,fontSize:"clamp(13px, 2vw, 16px)",marginBottom:6}}>{s.title}</div>
+                        <div style={{background:"rgba(255,255,255,.15)",height:6,borderRadius:3}}><div style={{width:"40%",height:6,background:"#1DD1A1",borderRadius:3}}/></div>
+                        <div style={{fontSize:"clamp(10px, 1.5vw, 12px)",opacity:.6,marginTop:4}}>{s.duration}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {tab==="battle"&&(
+                  <div style={{padding:"clamp(12px, 2vw, 24px)",display:"flex",flexDirection:"column",gap:"clamp(10px, 1.5vw, 16px)"}}>
+                    <div style={{fontWeight:700,fontSize:"clamp(14px, 2.5vw, 18px)"}}>⚔️ Science Battle</div>
+                    <div style={{background:"linear-gradient(135deg,#e17055,#d63031)",borderRadius:"clamp(12px, 2vw, 16px)",padding:"clamp(12px, 2vw, 20px)",color:"white",textAlign:"center"}}>
+                      <div style={{fontSize:"clamp(11px, 1.5vw, 13px)",opacity:.8}}>MODULE 3 — STAR 3</div>
+                      <div style={{fontWeight:700,fontSize:"clamp(14px, 2.5vw, 18px)",marginTop:4}}>"Is a virus alive or not alive?"</div>
+                    </div>
+                    {!voted?<div style={{display:"flex",gap:"clamp(8px, 1.5vw, 14px)"}}>
+                      {["🦠 ALIVE","💀 NOT ALIVE"].map(v=>(
+                        <button key={v} onClick={()=>setVoted(v)} style={{flex:1,padding:"clamp(12px, 2vw, 20px) clamp(8px, 1.5vw, 14px)",border:"2px solid #e17055",borderRadius:"clamp(10px, 1.5vw, 14px)",background:"white",fontWeight:700,fontSize:"clamp(12px, 2vw, 15px)",cursor:"pointer",color:"#e17055"}}>{v}</button>
+                      ))}
+                    </div>:<div style={{display:"flex",flexDirection:"column",gap:"clamp(6px, 1vw, 10px)"}}>
+                      <div style={{background:"#00b894",borderRadius:"clamp(8px, 1.5vw, 12px)",padding:"clamp(10px, 2vw, 14px)",color:"white",fontWeight:700,fontSize:"clamp(12px, 2vw, 14px)",textAlign:"center"}}>✅ Voted: {voted}</div>
+                      {[["🦠 ALIVE","Viruses evolve and adapt.","#A29BFE"],["💀 NOT ALIVE","Can't survive without a host.","#fd79a8"]].map(([s,t,c])=>(
+                        <div key={s} style={{background:c+"22",border:`1.5px solid ${c}`,borderRadius:"clamp(10px, 1.5vw, 14px)",padding:"clamp(10px, 2vw, 14px)"}}>
+                          <div style={{fontWeight:700,fontSize:"clamp(11px, 1.5vw, 13px)",color:c}}>{s}</div>
+                          <div style={{fontSize:"clamp(12px, 1.5vw, 14px)",marginTop:4}}>{t}</div>
+                        </div>
+                      ))}
+                      <div style={{background:"#00b89422",borderRadius:"clamp(10px, 1.5vw, 14px)",padding:"clamp(10px, 2vw, 14px)",textAlign:"center",fontWeight:700,fontSize:"clamp(12px, 2vw, 14px)",color:"#00b894"}}>+25 XP earned! 🎉</div>
+                    </div>}
+                  </div>
+                )}
+                {tab==="ranks"&&(
+                  <div style={{padding:"clamp(12px, 2vw, 24px)",display:"flex",flexDirection:"column",gap:8}}>
+                    <div style={{fontWeight:700,fontSize:"clamp(14px, 2.5vw, 18px)"}}>🏅 Rank Ladder</div>
+                    {["Science Cadet","Spark Explorer","Atom Scout","Bio Ranger","Geo Pioneer","Quantum Apprentice","Stellar Knight","Nova Commander","Spark Admiral","Supreme Spark Commander"].map((r,i)=>(
+                      <div key={r} style={{display:"flex",alignItems:"center",gap:"clamp(8px, 1.5vw, 14px)",background:i===0?"#667eea11":"#fafafa",border:`1.5px solid ${i===0?"#667eea":"#eee"}`,borderRadius:12,padding:"clamp(8px, 1.5vw, 14px) clamp(10px, 2vw, 16px)"}}>
+                        <div style={{width:"clamp(28px, 5vw, 36px)",height:"clamp(28px, 5vw, 36px)",borderRadius:"50%",background:i===0?"#667eea":i<1?"#00b894":"#dfe6e9",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:i===0||i<1?"white":"#aaa",fontSize:"clamp(10px, 1.5vw, 13px)"}}>{i<1?"✓":i+1}</div>
+                        <div style={{flex:1}}><div style={{fontWeight:700,fontSize:"clamp(12px, 2vw, 14px)",color:i===0?"#667eea":"#2d3436"}}>{r}</div><div style={{fontSize:"clamp(10px, 1.5vw, 12px)",color:"#aaa"}}>Modules {i*2+1}–{i*2+2}</div></div>
+                        {i===0&&<span style={{fontSize:"clamp(10px, 1.5vw, 12px)",background:"#667eea",color:"white",borderRadius:10,padding:"2px 8px"}}>YOU</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {tab==="profile"&&(
+                  <div style={{padding:"clamp(12px, 2vw, 24px)",display:"flex",flexDirection:"column",gap:"clamp(10px, 1.5vw, 16px)"}}>
+                    <div style={{background:"linear-gradient(135deg,#667eea,#764ba2)",borderRadius:"clamp(16px, 3vw, 24px)",padding:"clamp(16px, 3vw, 28px)",color:"white",textAlign:"center"}}>
+                      <div style={{fontSize:"clamp(36px, 8vw, 52px)",marginBottom:8}}>🧑‍🚀</div>
+                      <div style={{fontWeight:700,fontSize:"clamp(16px, 3vw, 22px)"}}>{currentUser ? currentUser.username : "CosmicNebula42"}</div>
+                      <div style={{fontSize:"clamp(11px, 1.5vw, 13px)",opacity:.8}}>{currentUser ? currentUser.rank : "Science Cadet"}</div>
+                      <div style={{display:"flex",justifyContent:"center",gap:"clamp(16px, 4vw, 32px)",marginTop:"clamp(10px, 2vw, 16px)"}}>
+                        {[[currentUser ? currentUser.xp.toLocaleString() : "0","XP"],
+                          [currentUser ? currentUser.streak : "0","🔥"],
+                          [currentUser ? currentUser.modules : "0","Modules"]].map(([v,l])=>(
+                          <div key={l}><div style={{fontWeight:700,fontSize:"clamp(18px, 3vw, 24px)"}}>{v}</div><div style={{fontSize:"clamp(10px, 1.5vw, 12px)",opacity:.8}}>{l}</div></div>
+                        ))}
+                      </div>
+                    </div>
+                    <button onClick={onLogout} style={{background:"#ff7675",color:"white",border:"none",borderRadius:"clamp(10px, 1.5vw, 14px)",padding:"clamp(10px, 2vw, 14px)",fontWeight:700,fontSize:"clamp(13px, 2vw, 15px)",cursor:"pointer"}}>Log Out</button>
+                  </div>
+                )}
+              </div>
+              <div style={{background:"white",borderTop:"1px solid #eee",display:"flex",flexShrink:0}}>
+                {TABS.map(t=>(
+                  <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"clamp(8px, 1.5vw, 12px) 0",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:tab===t.id?"#667eea":"#aaa"}}>
+                    <span style={{fontSize:"clamp(16px, 3vw, 22px)"}}>{t.icon}</span>
+                    <span style={{fontSize:"clamp(9px, 1.2vw, 11px)",fontWeight:tab===t.id?700:400}}>{t.label}</span>
+                    {tab===t.id&&<div style={{width:4,height:4,background:"#667eea",borderRadius:2}}/>}
+                  </button>
+                ))}
+              </div>
+              {selMod&&<ModuleModal mod={selMod} onClose={()=>setSelMod(null)}/>}
+            </div>
+          );
+        }
+
+        // ─── ADMIN PANEL ──────────────────────────────────────────────────────────────
+        function StatCard({icon,label,value,color}) {
+          return (
+            <div style={{background:"white",borderRadius:"clamp(12px, 2vw, 16px)",padding:"clamp(12px, 2vw, 18px) clamp(14px, 2vw, 20px)",border:`1.5px solid ${color}33`,flex:"1 1 clamp(140px, 20vw, 200px)",minWidth:0}}>
+              <div style={{fontSize:"clamp(18px, 3vw, 26px)"}}>{icon}</div>
+              <div style={{fontWeight:800,fontSize:"clamp(18px, 3vw, 26px)",color,marginTop:4}}>{value}</div>
+              <div style={{fontSize:"clamp(10px, 1.5vw, 12px)",color:"#aaa",marginTop:2}}>{label}</div>
+            </div>
+          );
+        }
+
+        function AdminModules({modules,setModules}) {
+          const [editing,setEditing]=React.useState(null);
+          const [form,setForm]=React.useState({});
+          const [showForm,setShowForm]=React.useState(false);
+          const openEdit = (mod) => { setForm({...mod}); setEditing(mod.id); setShowForm(true); };
+          const openNew = () => { setForm({id:Date.now(),tier:1,title:"",emoji:"🔬",domains:[],stars:0,locked:true,status:"draft"}); setEditing(null); setShowForm(true); };
+          const save = () => {
+            if(!form.title.trim()) return;
+            if(editing) setModules(ms=>ms.map(m=>m.id===editing?{...form}:m));
+            else setModules(ms=>[...ms,{...form}]);
+            setShowForm(false);
+          };
+          const del = (id) => { setModules(ms=>ms.filter(m=>m.id!==id)); };
+          const toggle = (id,field) => setModules(ms=>ms.map(m=>m.id===id?{...m,[field]:!m[field]}:m));
+          const setStatus = (id,val) => setModules(ms=>ms.map(m=>m.id===id?{...m,status:val}:m));
+
+          return (
+            <div style={{display:"flex",flexDirection:"column",gap:"clamp(10px, 1.5vw, 16px)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontWeight:700,fontSize:"clamp(14px, 2.5vw, 18px)",color:"#2d3436"}}>📦 Modules ({modules.length})</div>
+                <Btn onClick={openNew} color="#667eea">+ New Module</Btn>
+              </div>
+
+              {showForm&&(
+                <div style={{background:"white",border:"1.5px solid #667eea",borderRadius:"clamp(12px, 2vw, 16px)",padding:"clamp(12px, 2vw, 20px)",display:"flex",flexDirection:"column",gap:"clamp(8px, 1.5vw, 12px)"}}>
+                  <div style={{fontWeight:700,color:"#667eea",fontSize:"clamp(13px, 2vw, 15px)"}}>{editing?"Edit Module":"New Module"}</div>
+                  <div style={{display:"flex",gap:"clamp(6px, 1vw, 10px)",flexWrap:"wrap"}}>
+                    <Input value={form.emoji||""} onChange={v=>setForm(f=>({...f,emoji:v}))} placeholder="Emoji" style={{width:"clamp(50px, 10vw, 70px)"}}/>
+                    <Input value={form.title||""} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="Module title"/>
+                  </div>
+                  <div style={{display:"flex",gap:"clamp(6px, 1vw, 10px)",flexWrap:"wrap"}}>
+                    <Select value={form.tier||1} onChange={v=>setForm(f=>({...f,tier:Number(v)}))} options={[1,2,3,4,5,6,7,8,9,10].map(n=>({value:n,label:`Tier ${n}`}))} style={{flex:1}}/>
+                    <Select value={form.status||"draft"} onChange={v=>setForm(f=>({...f,status:v}))} options={["draft","published"].map(s=>({value:s,label:s.charAt(0).toUpperCase()+s.slice(1)}))} style={{flex:1}}/>
+                  </div>
+                  <div style={{display:"flex",gap:"clamp(6px, 1vw, 10px)"}}>
+                    <label style={{display:"flex",alignItems:"center",gap:6,fontSize:"clamp(12px, 1.5vw, 14px)",cursor:"pointer"}}>
+                      <input type="checkbox" checked={!!form.locked} onChange={e=>setForm(f=>({...f,locked:e.target.checked}))}/>Locked
+                    </label>
+                  </div>
+                  <div style={{display:"flex",gap:"clamp(6px, 1vw, 10px)"}}>
+                    <Btn onClick={save} color="#667eea">Save</Btn>
+                    <Btn onClick={()=>setShowForm(false)} color="#aaa" outline>Cancel</Btn>
+                  </div>
+                </div>
+              )}
+
+              {modules.map(mod=>(
+                <div key={mod.id} style={{background:"white",borderRadius:"clamp(12px, 2vw, 16px)",padding:"clamp(10px, 2vw, 16px) clamp(12px, 2vw, 18px)",border:"1.5px solid #eee",display:"flex",alignItems:"center",gap:"clamp(8px, 1.5vw, 14px)"}}>
+                  <div style={{width:"clamp(32px, 6vw, 44px)",height:"clamp(32px, 6vw, 44px)",borderRadius:"clamp(10px, 1.5vw, 14px)",background:(TIER_COLORS[mod.tier]||"#aaa")+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(16px, 3vw, 22px)",flexShrink:0}}>{mod.emoji}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:700,fontSize:"clamp(12px, 2vw, 14px)",color:"#2d3436"}}>{mod.title}</div>
+                    <div style={{display:"flex",gap:"clamp(4px, 1vw, 8px)",marginTop:4,flexWrap:"wrap"}}>
+                      <Badge color={TIER_COLORS[mod.tier]||"#aaa"}>Tier {mod.tier}</Badge>
+                      <Badge color={mod.status==="published"?"#00b894":"#636e72"}>{mod.status}</Badge>
+                      {mod.locked&&<Badge color="#e17055">🔒 Locked</Badge>}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:"clamp(4px, 0.8vw, 8px)",flexShrink:0}}>
+                    <button onClick={()=>toggle(mod.id,"locked")} title={mod.locked?"Unlock":"Lock"} style={{background:"#f0f0f0",border:"none",borderRadius:"clamp(6px, 1vw, 10px)",padding:"clamp(4px, 0.8vw, 8px) clamp(6px, 1vw, 10px)",cursor:"pointer",fontSize:"clamp(11px, 1.5vw, 14px)"}}>{mod.locked?"🔓":"🔒"}</button>
+                    <button onClick={()=>setStatus(mod.id,mod.status==="published"?"draft":"published")} title="Toggle publish" style={{background:"#f0f0f0",border:"none",borderRadius:"clamp(6px, 1vw, 10px)",padding:"clamp(4px, 0.8vw, 8px) clamp(6px, 1vw, 10px)",cursor:"pointer",fontSize:"clamp(11px, 1.5vw, 14px)"}}>{mod.status==="published"?"📤":"📢"}</button>
+                    <button onClick={()=>openEdit(mod)} style={{background:"#667eea22",border:"none",borderRadius:"clamp(6px, 1vw, 10px)",padding:"clamp(4px, 0.8vw, 8px) clamp(6px, 1vw, 10px)",cursor:"pointer",fontSize:"clamp(11px, 1.5vw, 14px)"}}>✏️</button>
+                    <button onClick={()=>del(mod.id)} style={{background:"#ff716522",border:"none",borderRadius:"clamp(6px, 1vw, 10px)",padding:"clamp(4px, 0.8vw, 8px) clamp(6px, 1vw, 10px)",cursor:"pointer",fontSize:"clamp(11px, 1.5vw, 14px)"}}>🗑️</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        }
+
+        function AdminShorts({shorts,setShorts,modules}) {
+          const [editing,setEditing]=React.useState(null);
+          const [form,setForm]=React.useState({});
+          const [showForm,setShowForm]=React.useState(false);
+          const openEdit = s => { setForm({...s}); setEditing(s.id); setShowForm(true); };
+          const openNew = () => { setForm({id:Date.now(),title:"",domain:DOMAINS[0],duration:"0:30",module:1,star:1,status:"draft"}); setEditing(null); setShowForm(true); };
+          const save = () => {
+            if(!form.title.trim()) return;
+            if(editing) setShorts(ss=>ss.map(s=>s.id===editing?{...form}:s));
+            else setShorts(ss=>[...ss,{...form}]);
+            setShowForm(false);
+          };
+          const del = id => { setShorts(ss=>ss.filter(s=>s.id!==id)); };
+          const setStatus = (id,val) => setShorts(ss=>ss.map(s=>s.id===id?{...s,status:val}:s));
+          return (
+            <div style={{display:"flex",flexDirection:"column",gap:"clamp(10px, 1.5vw, 16px)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontWeight:700,fontSize:"clamp(14px, 2.5vw, 18px)",color:"#2d3436"}}>▶️ Shorts ({shorts.length})</div>
+                <Btn onClick={openNew} color="#e17055">+ New Short</Btn>
+              </div>
+              {showForm&&(
+                <div style={{background:"white",border:"1.5px solid #e17055",borderRadius:"clamp(12px, 2vw, 16px)",padding:"clamp(12px, 2vw, 20px)",display:"flex",flexDirection:"column",gap:"clamp(8px, 1.5vw, 12px)"}}>
+                  <div style={{fontWeight:700,color:"#e17055",fontSize:"clamp(13px, 2vw, 15px)"}}>{editing?"Edit Short":"New Short"}</div>
+                  <Input value={form.title||""} onChange={v=>setForm(f=>({...f,title:v}))} placeholder="Short title"/>
+                  <Select value={form.domain||DOMAINS[0]} onChange={v=>setForm(f=>({...f,domain:v}))} options={DOMAINS}/>
+                  <div style={{display:"flex",gap:"clamp(6px, 1vw, 10px)",flexWrap:"wrap"}}>
+                    <Select value={form.module||1} onChange={v=>setForm(f=>({...f,module:Number(v)}))} options={modules.map(m=>({value:m.id,label:m.title}))} style={{flex:1}}/>
+                    <Select value={form.star||1} onChange={v=>setForm(f=>({...f,star:Number(v)}))} options={[{value:1,label:"⭐ Star 1"},{value:2,label:"⭐ Star 2"},{value:3,label:"⭐ Star 3"}]} style={{flex:1}}/>
+                  </div>
+                  <div style={{display:"flex",gap:"clamp(6px, 1vw, 10px)",flexWrap:"wrap"}}>
+                    <Input value={form.duration||""} onChange={v=>setForm(f=>({...f,duration:v}))} placeholder="Duration e.g. 0:45" style={{flex:1}}/>
+                    <Select value={form.status||"draft"} onChange={v=>setForm(f=>({...f,status:v}))} options={["draft","published"].map(s=>({value:s,label:s.charAt(0).toUpperCase()+s.slice(1)}))} style={{flex:1}}/>
+                  </div>
+                  <div style={{display:"flex",gap:"clamp(6px, 1vw, 10px)"}}>
+                    <Btn onClick={save} color="#e17055">Save</Btn>
+                    <Btn onClick={()=>setShowForm(false)} color="#aaa" outline>Cancel</Btn>
+                  </div>
+                </div>
+              )}
+              {shorts.map(s=>(
+                <div key={s.id} style={{background:"white",borderRadius:"clamp(12px, 2vw, 16px)",padding:"clamp(10px, 2vw, 16px) clamp(12px, 2vw, 18px)",border:"1.5px solid #eee",display:"flex",alignItems:"center",gap:"clamp(8px, 1.5vw, 14px)"}}>
+                  <div style={{width:"clamp(32px, 6vw, 44px)",height:"clamp(32px, 6vw, 44px)",borderRadius:"clamp(10px, 1.5vw, 14px)",background:"#636e7222",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(16px, 3vw, 22px)",flexShrink:0}}>▶️</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:700,fontSize:"clamp(12px, 2vw, 14px)",color:"#2d3436",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</div>
+                    <div style={{display:"flex",gap:"clamp(4px, 1vw, 8px)",marginTop:4,flexWrap:"wrap"}}>
+                      <Badge color="#A29BFE">{s.domain}</Badge>
+                      <Badge color={s.status==="published"?"#00b894":"#636e72"}>{s.status}</Badge>
+                      <Badge color="#636e72">{s.duration}</Badge>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:"clamp(4px, 0.8vw, 8px)",flexShrink:0}}>
+                    <button onClick={()=>setStatus(s.id,s.status==="published"?"draft":"published")} style={{background:"#f0f0f0",border:"none",borderRadius:"clamp(6px, 1vw, 10px)",padding:"clamp(4px, 0.8vw, 8px) clamp(6px, 1vw, 10px)",cursor:"pointer",fontSize:"clamp(11px, 1.5vw, 14px)"}}>{s.status==="published"?"📤":"📢"}</button>
+                    <button onClick={()=>openEdit(s)} style={{background:"#e1705522",border:"none",borderRadius:"clamp(6px, 1vw, 10px)",padding:"clamp(4px, 0.8vw, 8px) clamp(6px, 1vw, 10px)",cursor:"pointer",fontSize:"clamp(11px, 1.5vw, 14px)"}}>✏️</button>
+                    <button onClick={()=>del(s.id)} style={{background:"#ff716522",border:"none",borderRadius:"clamp(6px, 1vw, 10px)",padding:"clamp(4px, 0.8vw, 8px) clamp(6px, 1vw, 10px)",cursor:"pointer",fontSize:"clamp(11px, 1.5vw, 14px)"}}>🗑️</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        }
+
+        function AdminUsers({users,setUsers}) {
+          const [search,setSearch]=React.useState("");
+          const [filter,setFilter]=React.useState("all");
+          const setStatus = (id,val) => setUsers(us=>us.map(u=>u.id===id?{...u,status:val}:u));
+          const filtered = users.filter(u=>(filter==="all"||u.status===filter)&&(u.username.toLowerCase().includes(search.toLowerCase())));
+          return (
+            <div style={{display:"flex",flexDirection:"column",gap:"clamp(10px, 1.5vw, 16px)"}}>
+              <div style={{fontWeight:700,fontSize:"clamp(14px, 2.5vw, 18px)",color:"#2d3436"}}>👥 Users ({users.length})</div>
+              <div style={{display:"flex",gap:"clamp(6px, 1vw, 10px)",flexWrap:"wrap"}}>
+                <Input value={search} onChange={setSearch} placeholder="Search username…" style={{flex:1}}/>
+                <Select value={filter} onChange={setFilter} options={[{value:"all",label:"All"},{value:"active",label:"Active"},{value:"suspended",label:"Suspended"}]} style={{width:"clamp(100px, 20vw, 140px)"}}/>
+              </div>
+              {filtered.map(u=>(
+                <div key={u.id} style={{background:"white",borderRadius:"clamp(12px, 2vw, 16px)",padding:"clamp(10px, 2vw, 16px) clamp(12px, 2vw, 18px)",border:"1.5px solid #eee"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"clamp(8px, 1.5vw, 14px)"}}>
+                    <div style={{width:"clamp(32px, 6vw, 44px)",height:"clamp(32px, 6vw, 44px)",borderRadius:"50%",background:"linear-gradient(135deg,#667eea,#764ba2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(14px, 2.5vw, 18px)",color:"white",fontWeight:700,flexShrink:0}}>
+                      {u.username[0].toUpperCase()}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:700,fontSize:"clamp(12px, 2vw, 14px)",color:"#2d3436"}}>{u.username}</div>
+                      <div style={{fontSize:"clamp(10px, 1.5vw, 12px)",color:"#aaa"}}>{u.rank} · Joined {u.joined}</div>
+                    </div>
+                    <Badge color={u.status==="active"?"#00b894":"#e17055"}>{u.status}</Badge>
+                  </div>
+                  <div style={{display:"flex",gap:"clamp(8px, 1.5vw, 14px)",marginTop:"clamp(8px, 1.5vw, 12px)",padding:"clamp(6px, 1vw, 10px) 0",borderTop:"1px solid #f0f0f0"}}>
+                    {[["⭐ XP",u.xp],["🔥 Streak",u.streak],["📦 Modules",u.modules]].map(([l,v])=>(
+                      <div key={l} style={{flex:1,textAlign:"center"}}>
+                        <div style={{fontWeight:700,fontSize:"clamp(13px, 2vw, 16px)",color:"#2d3436"}}>{v}</div>
+                        <div style={{fontSize:"clamp(9px, 1.2vw, 11px)",color:"#aaa"}}>{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{display:"flex",gap:"clamp(6px, 1vw, 10px)",marginTop:"clamp(6px, 1vw, 10px)",flexWrap:"wrap"}}>
+                    {u.status==="active"
+                      ?<Btn onClick={()=>setStatus(u.id,"suspended")} color="#e17055" outline style={{flex:1,fontSize:"clamp(10px, 1.5vw, 12px)",minWidth:80}}>🚫 Suspend</Btn>
+                      :<Btn onClick={()=>setStatus(u.id,"active")} color="#00b894" outline style={{flex:1,fontSize:"clamp(10px, 1.5vw, 12px)",minWidth:80}}>✅ Restore</Btn>
+                    }
+                    <Btn onClick={()=>alert("Reset XP: "+u.username)} color="#636e72" outline style={{flex:1,fontSize:"clamp(10px, 1.5vw, 12px)",minWidth:80}}>🔄 Reset XP</Btn>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        }
+
+        function AdminPanel({modules,setModules,shorts,setShorts,users,setUsers,onLogout}) {
+          const [tab,setTab]=React.useState("dashboard");
+          const TABS=[{id:"dashboard",icon:"📊",label:"Dashboard"},{id:"modules",icon:"📦",label:"Modules"},{id:"shorts",icon:"▶️",label:"Shorts"},{id:"users",icon:"👥",label:"Users"}];
+          const pubM=modules.filter(m=>m.status==="published").length;
+          const pubS=shorts.filter(s=>s.status==="published").length;
+          const activeU=users.filter(u=>u.status==="active").length;
+          return (
+            <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#f7f8fc"}}>
+              <div style={{background:"linear-gradient(90deg,#2d3436,#636e72)",padding:"clamp(10px, 2vw, 16px) clamp(12px, 3vw, 24px)",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+                <div>
+                  <div style={{color:"white",fontWeight:800,fontSize:"clamp(14px, 2.5vw, 18px)"}}>🛠️ Admin Panel</div>
+                  <div style={{color:"#aaa",fontSize:"clamp(10px, 1.5vw, 12px)"}}>Little Genius CMS</div>
+                </div>
+                <button onClick={onLogout} style={{background:"#ff7675",color:"white",border:"none",borderRadius:"clamp(8px, 1.5vw, 12px)",padding:"clamp(4px, 1vw, 8px) clamp(8px, 1.5vw, 14px)",fontWeight:700,fontSize:"clamp(11px, 1.5vw, 13px)",cursor:"pointer"}}>Logout</button>
+              </div>
+
+              <div style={{flex:1,overflowY:"auto",padding:"clamp(12px, 2vw, 24px)",display:"flex",flexDirection:"column",gap:"clamp(12px, 2vw, 20px)"}}>
+                {tab==="dashboard"&&(
+                  <>
+                    <div style={{fontWeight:700,fontSize:"clamp(14px, 2.5vw, 18px)",color:"#2d3436"}}>📊 Overview</div>
+                    <div style={{display:"flex",gap:"clamp(8px, 1.5vw, 16px)",flexWrap:"wrap"}}>
+                      <StatCard icon="📦" label="Published Modules" value={pubM} color="#667eea"/>
+                      <StatCard icon="▶️" label="Published Shorts" value={pubS} color="#e17055"/>
+                    </div>
+                    <div style={{display:"flex",gap:"clamp(8px, 1.5vw, 16px)",flexWrap:"wrap"}}>
+                      <StatCard icon="👥" label="Active Users" value={activeU} color="#00b894"/>
+                      <StatCard icon="🚫" label="Suspended" value={users.length-activeU} color="#fd79a8"/>
+                    </div>
+                    <div style={{background:"white",borderRadius:"clamp(12px, 2vw, 16px)",padding:"clamp(14px, 2vw, 20px)",border:"1.5px solid #eee"}}>
+                      <div style={{fontWeight:700,fontSize:"clamp(12px, 2vw, 14px)",marginBottom:"clamp(10px, 1.5vw, 14px)",color:"#2d3436"}}>📈 Content Health</div>
+                      {[["Modules","published",modules,pubM,"#667eea"],["Shorts","published",shorts,pubS,"#e17055"]].map(([name,label,arr,pub,c])=>(
+                        <div key={name} style={{marginBottom:"clamp(10px, 1.5vw, 14px)"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",fontSize:"clamp(11px, 1.5vw, 13px)",marginBottom:4}}>
+                            <span style={{color:"#636e72"}}>{name}</span>
+                            <span style={{fontWeight:700,color:c}}>{pub}/{arr.length} {label}</span>
+                          </div>
+                          <div style={{background:"#f0f0f0",borderRadius:6,height:8}}>
+                            <div style={{width:`${(pub/Math.max(arr.length,1))*100}%`,height:8,background:c,borderRadius:6,transition:"width .3s"}}/>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{background:"white",borderRadius:"clamp(12px, 2vw, 16px)",padding:"clamp(14px, 2vw, 20px)",border:"1.5px solid #eee"}}>
+                      <div style={{fontWeight:700,fontSize:"clamp(12px, 2vw, 14px)",marginBottom:"clamp(8px, 1.5vw, 12px)",color:"#2d3436"}}>⚡ Quick Actions</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:"clamp(6px, 1vw, 10px)"}}>
+                        {[["📦 Go to Modules","modules","#667eea"],["▶️ Go to Shorts","shorts","#e17055"],["👥 Manage Users","users","#00b894"]].map(([l,t,c])=>(
+                          <Btn key={t} onClick={()=>setTab(t)} color={c} style={{textAlign:"left",fontSize:"clamp(11px, 1.5vw, 13px)",padding:"clamp(8px, 1.5vw, 12px) clamp(10px, 2vw, 16px)"}}>{l}</Btn>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+                {tab==="modules"&&<AdminModules modules={modules} setModules={setModules}/>}
+                {tab==="shorts"&&<AdminShorts shorts={shorts} setShorts={setShorts} modules={modules}/>}
+                {tab==="users"&&<AdminUsers users={users} setUsers={setUsers}/>}
+              </div>
+
+              <div style={{background:"white",borderTop:"1px solid #eee",display:"flex",flexShrink:0}}>
+                {TABS.map(t=>(
+                  <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"clamp(8px, 1.5vw, 12px) 0",border:"none",background:"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:tab===t.id?"#2d3436":"#aaa"}}>
+                    <span style={{fontSize:"clamp(16px, 3vw, 22px)"}}>{t.icon}</span>
+                    <span style={{fontSize:"clamp(9px, 1.2vw, 11px)",fontWeight:tab===t.id?700:400}}>{t.label}</span>
+                    {tab===t.id&&<div style={{width:4,height:4,background:"#2d3436",borderRadius:2}}/>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        }
+
+        // ─── ROOT ─────────────────────────────────────────────────────────────────────
+        export default function App() {
+          const [users, setUsers] = React.useState(() => {
+            const saved = localStorage.getItem("little_genius_users");
+            if (saved) {
+              try {
+                return JSON.parse(saved);
+              } catch (e) {
+                console.error(e);
+              }
+            }
+            return INIT_USERS;
+          });
+
+          const [currentUser, setCurrentUser] = React.useState(() => {
+            const saved = localStorage.getItem("little_genius_currentUser");
+            if (saved) {
+              try {
+                return JSON.parse(saved);
+              } catch (e) {
+                console.error(e);
+              }
+            }
+            return null;
+          });
+
+          const [role, setRole] = React.useState(() => {
+            return localStorage.getItem("little_genius_role") || null;
+          });
+
+          const [modules, setModules] = React.useState(INIT_MODULES);
+          const [shorts, setShorts] = React.useState(INIT_SHORTS);
+
+          React.useEffect(() => {
+            localStorage.setItem("little_genius_users", JSON.stringify(users));
+          }, [users]);
+
+          React.useEffect(() => {
+            if (currentUser) {
+              localStorage.setItem("little_genius_currentUser", JSON.stringify(currentUser));
+            } else {
+              localStorage.removeItem("little_genius_currentUser");
+            }
+          }, [currentUser]);
+
+          React.useEffect(() => {
+            if (role) {
+              localStorage.setItem("little_genius_role", role);
+            } else {
+              localStorage.removeItem("little_genius_role");
+            }
+          }, [role]);
+
+          const handleLogout = () => {
+            setRole(null);
+            setCurrentUser(null);
+          };
+
+          return (
+            <>
+              {!role && (
+                <LoginScreen 
+                  onLogin={(newRole, userObj) => {
+                    setRole(newRole);
+                    setCurrentUser(userObj);
+                  }}
+                  users={users}
+                  setUsers={setUsers}
+                />
+              )}
+              {role === "user" && (
+                <div style={{fontFamily:"'Segoe UI',sans-serif",height:"100vh",display:"flex",flexDirection:"column",width:"min(100%, 480px)",margin:"0 auto",position:"relative",overflow:"hidden",boxShadow:"0 0 40px rgba(0,0,0,.15)"}}>
+                  <UserApp 
+                    modules={modules} 
+                    shorts={shorts} 
+                    onLogout={handleLogout}
+                    currentUser={currentUser}
+                  />
+                </div>
+              )}
+              {role === "admin" && (
+                <div style={{fontFamily:"'Segoe UI',sans-serif",minHeight:"100vh",display:"flex",flexDirection:"column",width:"min(100%, 1200px)",margin:"0 auto",position:"relative",boxShadow:"0 0 40px rgba(0,0,0,.08)"}}>
+                  <AdminPanel 
+                    modules={modules} 
+                    setModules={setModules} 
+                    shorts={shorts} 
+                    setShorts={setShorts} 
+                    users={users} 
+                    setUsers={setUsers} 
+                    onLogout={handleLogout}
+                  />
+                </div>
+              )}
+            </>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

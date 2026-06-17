@@ -1,0 +1,19 @@
+{
+  "name": "little-genius",
+  "version": "1.0.0",
+  "description": "Science Learning App for Kids 5-9",
+  "private": true,
+  "dependencies": {
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.2",
+    "next": "^16.2.9",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  }
+}
