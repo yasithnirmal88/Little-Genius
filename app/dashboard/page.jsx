@@ -67,12 +67,12 @@ export default function DashboardPage() {
       .eq('status', 'published')
     setShorts(sh || [])
 
+    const progMap = {}
     if (prof) {
       const { data: prog } = await supabase
         .from('user_progress')
         .select('*')
         .eq('user_id', prof.id)
-      const progMap = {}
       ;(prog || []).forEach((p) => {
         progMap[p.module_id] = p
       })
