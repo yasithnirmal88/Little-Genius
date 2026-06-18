@@ -105,12 +105,13 @@ export default function DashboardPage() {
       const stars = modProgress?.stars || 0
       modLessons.forEach((lesson) => {
         const lessonQuiz = modQuizzes.find((q) => q.lesson_id === lesson.id)
-        allSteps.push({ type: 'video', mod, lesson, lessonQuiz, stepNumber: lesson.step_number, locked, stars, modProgress })
+        const stepCompleted = stars >= (lesson.step_number || 1)
+        allSteps.push({ type: 'video', mod, lesson, lessonQuiz, stepNumber: lesson.step_number, stepCompleted, locked, stars, modProgress })
         if (lesson.knowledge_text) {
-          allSteps.push({ type: 'knowledge', mod, lesson, lessonQuiz, stepNumber: lesson.step_number, locked, stars, modProgress })
+          allSteps.push({ type: 'knowledge', mod, lesson, lessonQuiz, stepNumber: lesson.step_number, stepCompleted, locked, stars, modProgress })
         }
         if (lessonQuiz) {
-          allSteps.push({ type: 'quiz', mod, lesson, quiz: lessonQuiz, stepNumber: lesson.step_number, locked, stars, modProgress })
+          allSteps.push({ type: 'quiz', mod, lesson, quiz: lessonQuiz, stepNumber: lesson.step_number, stepCompleted, locked, stars, modProgress })
         }
       })
     })
@@ -423,6 +424,13 @@ function IconCheck({ size = 22 }) {
     </svg>
   )
 }
+function IconStar({ size = 22 }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="#FFD700" stroke="#FFD700" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  )
+}
 
 function darken(hex, amount = 0.35) {
   const r = parseInt(hex.slice(1,3), 16)
@@ -469,8 +477,8 @@ function PathTab({ steps, modules, progress, onSelect, profile, unlockedMods }) 
     y: START_Y + i * V_SPACING,
   }))
 
-  // First incomplete node is "active"
-  const activeIdx = steps.findIndex(s => !s.locked && s.stars < 3)
+  // First incomplete step is "active"
+  const activeIdx = steps.findIndex(s => !s.locked && !s.stepCompleted)
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: '#0B0E2A', position: 'relative' }}>
@@ -557,8 +565,8 @@ function PathTab({ steps, modules, progress, onSelect, profile, unlockedMods }) 
             const nodeColor = nodeColors[colorIdx]
             const fill = locked ? '#2A2A4A' : nodeColor
             const shadow = locked ? '#1A1A3A' : darken(nodeColor)
-            const isActive = i === activeIdx && !locked && step.stars < 3
-            const icon = locked ? <IconLock size={ICON_SIZE} /> : step.stars >= 3 ? <IconCheck size={ICON_SIZE} /> : iconMap[step.type] || <IconPlay size={ICON_SIZE} />
+            const isActive = i === activeIdx && !locked && !step.stepCompleted
+            const icon = locked ? <IconLock size={ICON_SIZE} /> : step.stepCompleted ? <IconStar size={ICON_SIZE} /> : iconMap[step.type] || <IconPlay size={ICON_SIZE} />
             const pos = nodes[i]
             const offsetPx = pos.x - CENTER_X
 

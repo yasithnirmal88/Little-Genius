@@ -124,8 +124,25 @@ export default function ModuleFlowPage() {
   const isLast = stepIdx >= steps.length - 1
   const earnedStars = progress?.stars || 0
 
-  const goNext = () => {
-    if (stepIdx < steps.length - 1) setStepIdx(stepIdx + 1)
+  const goNext = async () => {
+    if (stepIdx < steps.length - 1) {
+      const step = currentStep
+      if (step && (step.type === 'video' || step.type === 'knowledge')) {
+        setSaving(true)
+        const completedSteps = [...new Set([...(progress?.steps_completed || []), stepIdx])]
+        const upd = {
+          user_id: profile.id,
+          module_id: Number(id),
+          steps_completed: completedSteps,
+          stars: progress?.stars || 0,
+          quiz_scores: progress?.quiz_scores || [],
+        }
+        await supabase.from('user_progress').upsert(upd, { onConflict: 'user_id,module_id' })
+        setProgress((p) => ({ ...p, ...upd }))
+        setSaving(false)
+      }
+      setStepIdx(stepIdx + 1)
+    }
   }
 
   const goBack = () => {
