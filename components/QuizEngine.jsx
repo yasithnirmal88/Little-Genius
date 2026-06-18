@@ -1,7 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Btn } from './ui/Btn'
+
+function openMoji(hex) {
+  return `https://raw.githubusercontent.com/hfg-gmuend/openmoji/master/color/svg/${hex}.svg`
+}
 
 export default function QuizEngine({ questions, onComplete, onContinue, passingScore = 80, title = 'Quiz' }) {
   const [idx, setIdx] = useState(0)
@@ -11,10 +14,12 @@ export default function QuizEngine({ questions, onComplete, onContinue, passingS
   const [finished, setFinished] = useState(false)
 
   const q = questions[idx]
+
   if (!questions || questions.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: 32, color: '#aaa' }}>
-        No questions yet.
+      <div style={emptyState}>
+        <img src={openMoji('1F914')} alt="" width="54" height="54" />
+        <div>No questions yet.</div>
       </div>
     )
   }
@@ -27,12 +32,12 @@ export default function QuizEngine({ questions, onComplete, onContinue, passingS
 
   const handleNext = () => {
     if (idx < questions.length - 1) {
-      setIdx(idx + 1)
+      setIdx((prev) => prev + 1)
       setSelected(null)
       setSubmitted(false)
     } else {
       const finalAnswers = [...answers, { questionIndex: idx, selected, correct: selected === q.correct_index }]
-      const correctCount = finalAnswers.filter((a) => a.correct).length
+      const correctCount = finalAnswers.filter((item) => item.correct).length
       const score = Math.round((correctCount / questions.length) * 100)
       setFinished(true)
       onComplete({ score, passed: score >= passingScore, correctCount, total: questions.length, answers: finalAnswers })
@@ -40,151 +45,355 @@ export default function QuizEngine({ questions, onComplete, onContinue, passingS
   }
 
   if (finished) {
-    const correctCount = answers.filter((a) => a.correct).length + (selected === q.correct_index ? 1 : 0)
+    const correctCount = answers.filter((item) => item.correct).length + (selected === q.correct_index ? 1 : 0)
     const score = Math.round((correctCount / questions.length) * 100)
     const passed = score >= passingScore
+
     return (
-      <div style={{ textAlign: 'center', padding: 'clamp(16px, 3vw, 32px)' }}>
-        <div style={{ fontSize: 'clamp(40px, 8vw, 60px)', marginBottom: 8 }}>
-          {passed ? '🎉' : '😅'}
-        </div>
-        <div style={{ fontWeight: 700, fontSize: 'clamp(18px, 3vw, 24px)', color: passed ? '#00b894' : '#e17055' }}>
-          {passed ? 'Great job!' : 'Keep trying!'}
-        </div>
-        <div style={{ fontSize: 'clamp(13px, 2vw, 16px)', color: '#636e72', marginTop: 8 }}>
-          {correctCount} / {questions.length} correct
-        </div>
-        <div style={{
-          margin: '16px auto',
-          width: 'clamp(140px, 30vw, 200px)',
-          height: 8,
-          background: '#f0f0f0',
-          borderRadius: 4,
-          overflow: 'hidden',
-        }}>
-          <div style={{
-            width: `${score}%`,
-            height: 8,
-            background: passed ? '#00b894' : '#e17055',
-            borderRadius: 4,
-            transition: 'width .5s',
-          }} />
-        </div>
-        <div style={{ fontSize: 'clamp(11px, 1.5vw, 13px)', color: '#aaa', marginBottom: 16 }}>
-          Passing score: {passingScore}% · Your score: {score}%
-        </div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <Btn onClick={() => { setIdx(0); setSelected(null); setSubmitted(false); setAnswers([]); setFinished(false) }} color="#667eea" outline>
-            Retry
-          </Btn>
-          {onContinue && (
-            <Btn onClick={onContinue} color="#00b894">
-              Continue →
-            </Btn>
-          )}
+      <div style={resultShell}>
+        <div style={resultPanel}>
+          <img src={openMoji(passed ? '1F389' : '1F642')} alt="" width="84" height="84" />
+          <div style={{ ...resultTitle, color: passed ? '#15803d' : '#c2410c' }}>
+            {passed ? 'Great job!' : 'Keep trying!'}
+          </div>
+          <div style={resultText}>
+            {correctCount} / {questions.length} correct
+          </div>
+
+          <div style={resultBarTrack}>
+            <div style={{ ...resultBarFill, width: `${score}%`, background: passed ? '#84cc16' : '#fb923c' }} />
+          </div>
+
+          <div style={resultCaption}>
+            Passing score: {passingScore}% • Your score: {score}%
+          </div>
+
+          <div style={resultActions}>
+            <button
+              onClick={() => {
+                setIdx(0)
+                setSelected(null)
+                setSubmitted(false)
+                setAnswers([])
+                setFinished(false)
+              }}
+              style={secondaryButton}
+            >
+              Retry
+            </button>
+            {onContinue && (
+              <button onClick={onContinue} style={primaryButton}>
+                Continue
+              </button>
+            )}
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(10px, 1.5vw, 16px)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontWeight: 700, fontSize: 'clamp(12px, 2vw, 14px)', color: '#636e72' }}>
-          {title}
+    <div style={quizShell}>
+      <div style={quizTopRow}>
+        <div style={quizLabelWrap}>
+          <img src={openMoji('1F52C')} alt="" width="28" height="28" />
+          <div>
+            <div style={quizTitle}>{title}</div>
+            <div style={quizCounter}>Question {idx + 1} of {questions.length}</div>
+          </div>
         </div>
-        <div style={{ fontSize: 'clamp(11px, 1.5vw, 13px)', color: '#aaa' }}>
-          Q{idx + 1}/{questions.length}
-        </div>
+        <span style={counterBubble}>{idx + 1}/{questions.length}</span>
       </div>
-      <div style={{ background: '#f0f0f0', borderRadius: 6, height: 6 }}>
-        <div style={{
-          width: `${((idx + (submitted ? 1 : 0)) / questions.length) * 100}%`,
-          height: 6,
-          background: 'linear-gradient(90deg,#667eea,#764ba2)',
-          borderRadius: 6,
-          transition: 'width .3s',
-        }} />
+
+      <div style={progressTrack}>
+        <div
+          style={{
+            ...progressFill,
+            width: `${((idx + (submitted ? 1 : 0)) / questions.length) * 100}%`,
+          }}
+        />
       </div>
-      <div style={{
-        background: 'white',
-        borderRadius: 'clamp(12px, 2vw, 16px)',
-        padding: 'clamp(14px, 2.5vw, 24px)',
-        border: '1.5px solid #eee',
-      }}>
-        <div style={{ fontWeight: 700, fontSize: 'clamp(14px, 2.5vw, 18px)', color: '#2d3436', marginBottom: 'clamp(12px, 2vw, 20px)' }}>
-          {q.question_text}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {q.options.map((opt, oi) => {
-            const isSelected = selected === oi
-            const isCorrect = q.correct_index === oi
-            let bg = 'white'
-            let border = '#e0e0e0'
-            let txt = '#2d3436'
+
+      <div style={questionCard}>
+        <div style={questionText}>{q.question_text}</div>
+        <div style={answerStack}>
+          {q.options.map((opt, optionIndex) => {
+            const isSelected = selected === optionIndex
+            const isCorrect = q.correct_index === optionIndex
+            let background = '#ffffff'
+            let border = '#dbeafe'
+            let text = '#22314a'
+
             if (submitted) {
-              if (isCorrect) { bg = '#00b89411'; border = '#00b894'; txt = '#00b894' }
-              else if (isSelected && !isCorrect) { bg = '#ff767522'; border = '#e17055'; txt = '#e17055' }
-              else { border = '#f0f0f0'; txt = '#bbb' }
+              if (isCorrect) {
+                background = '#dcfce7'
+                border = '#84cc16'
+                text = '#166534'
+              } else if (isSelected && !isCorrect) {
+                background = '#ffedd5'
+                border = '#fb923c'
+                text = '#9a3412'
+              } else {
+                background = '#f8fafc'
+                border = '#e2e8f0'
+                text = '#94a3b8'
+              }
             } else if (isSelected) {
-              bg = '#667eea11'; border = '#667eea'; txt = '#667eea'
+              background = '#fef3c7'
+              border = '#facc15'
+              text = '#854d0e'
             }
+
             return (
               <button
-                key={oi}
-                onClick={() => { if (!submitted) setSelected(oi) }}
+                key={optionIndex}
+                onClick={() => {
+                  if (!submitted) setSelected(optionIndex)
+                }}
                 disabled={submitted}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'clamp(8px, 1.5vw, 12px)',
-                  padding: 'clamp(10px, 1.5vw, 14px) clamp(12px, 2vw, 16px)',
-                  border: `2px solid ${border}`,
-                  borderRadius: 'clamp(10px, 1.5vw, 14px)',
-                  background: bg,
+                  ...answerButton,
+                  background,
+                  borderColor: border,
+                  color: text,
                   cursor: submitted ? 'default' : 'pointer',
-                  textAlign: 'left',
-                  fontSize: 'clamp(13px, 2vw, 15px)',
-                  color: txt,
-                  fontWeight: isSelected || submitted ? 600 : 400,
-                  transition: 'all .15s',
-                  width: '100%',
-                  boxSizing: 'border-box',
                 }}
               >
-                <span style={{
-                  width: 'clamp(22px, 4vw, 28px)',
-                  height: 'clamp(22px, 4vw, 28px)',
-                  borderRadius: '50%',
-                  border: `2px solid ${submitted && isCorrect ? '#00b894' : border}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 'clamp(11px, 1.5vw, 13px)',
-                  fontWeight: 700,
-                  flexShrink: 0,
-                  background: submitted && isCorrect ? '#00b894' : 'transparent',
-                  color: submitted && isCorrect ? 'white' : txt,
-                }}>
-                  {submitted && isCorrect ? '✓' : submitted && isSelected && !isCorrect ? '✗' : String.fromCharCode(65 + oi)}
+                <span
+                  style={{
+                    ...answerBubble,
+                    borderColor: submitted && isCorrect ? '#84cc16' : border,
+                    background: submitted && isCorrect ? '#84cc16' : '#ffffff',
+                    color: submitted && isCorrect ? '#ffffff' : text,
+                  }}
+                >
+                  {submitted && isCorrect ? '✓' : submitted && isSelected && !isCorrect ? '✕' : String.fromCharCode(65 + optionIndex)}
                 </span>
-                <span>{opt}</span>
+                <span style={answerText}>{opt}</span>
               </button>
             )
           })}
         </div>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+
+      <div style={actionRow}>
         {!submitted ? (
-          <Btn onClick={handleSubmit} color="#667eea" style={{ padding: '10px 24px' }}>
+          <button onClick={handleSubmit} style={primaryButton}>
             Submit
-          </Btn>
+          </button>
         ) : (
-          <Btn onClick={handleNext} color="#667eea" style={{ padding: '10px 24px' }}>
-            {idx < questions.length - 1 ? 'Next →' : 'See Results'}
-          </Btn>
+          <button onClick={handleNext} style={primaryButton}>
+            {idx < questions.length - 1 ? 'Next Question' : 'See Results'}
+          </button>
         )}
       </div>
     </div>
   )
+}
+
+const emptyState = {
+  textAlign: 'center',
+  padding: 26,
+  color: '#64748b',
+  fontWeight: 800,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  alignItems: 'center',
+}
+
+const quizShell = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 16,
+}
+
+const quizTopRow = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 12,
+}
+
+const quizLabelWrap = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+}
+
+const quizTitle = {
+  fontSize: 22,
+  lineHeight: 1.05,
+  fontWeight: 900,
+  color: '#22314a',
+}
+
+const quizCounter = {
+  marginTop: 4,
+  fontSize: 13,
+  fontWeight: 800,
+  color: '#64748b',
+}
+
+const counterBubble = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '7px 12px',
+  borderRadius: 999,
+  background: '#ede9fe',
+  color: '#5b21b6',
+  fontWeight: 900,
+  fontSize: 12,
+  flexShrink: 0,
+}
+
+const progressTrack = {
+  width: '100%',
+  height: 12,
+  background: '#e0f2fe',
+  borderRadius: 999,
+  overflow: 'hidden',
+}
+
+const progressFill = {
+  height: 12,
+  background: '#60a5fa',
+  borderRadius: 999,
+  transition: 'width .25s ease',
+}
+
+const questionCard = {
+  background: '#fff7d6',
+  border: '3px solid #fcd34d',
+  borderRadius: 24,
+  padding: 18,
+  boxShadow: '0 10px 0 rgba(245, 158, 11, 0.08)',
+}
+
+const questionText = {
+  fontSize: 24,
+  lineHeight: 1.2,
+  fontWeight: 900,
+  color: '#7c2d12',
+}
+
+const answerStack = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  marginTop: 18,
+}
+
+const answerButton = {
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  padding: '14px 14px',
+  border: '3px solid',
+  borderRadius: 20,
+  textAlign: 'left',
+}
+
+const answerBubble = {
+  width: 36,
+  height: 36,
+  borderRadius: '50%',
+  border: '3px solid',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontWeight: 900,
+  fontSize: 14,
+  flexShrink: 0,
+}
+
+const answerText = {
+  fontSize: 16,
+  lineHeight: 1.45,
+  fontWeight: 800,
+}
+
+const actionRow = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+}
+
+const primaryButton = {
+  border: '3px solid #4d9b14',
+  background: '#84cc16',
+  color: '#fff',
+  borderRadius: 18,
+  padding: '12px 20px',
+  fontSize: 17,
+  fontWeight: 900,
+  cursor: 'pointer',
+  boxShadow: '0 10px 0 rgba(77, 155, 20, 0.22)',
+}
+
+const secondaryButton = {
+  border: '3px solid #93c5fd',
+  background: '#ffffff',
+  color: '#1d4ed8',
+  borderRadius: 18,
+  padding: '12px 20px',
+  fontSize: 17,
+  fontWeight: 900,
+  cursor: 'pointer',
+}
+
+const resultShell = {
+  display: 'flex',
+  justifyContent: 'center',
+}
+
+const resultPanel = {
+  width: '100%',
+  background: '#ffffff',
+  border: '3px solid #dbeafe',
+  borderRadius: 28,
+  padding: 24,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 12,
+  textAlign: 'center',
+}
+
+const resultTitle = {
+  fontSize: 30,
+  lineHeight: 1,
+  fontWeight: 900,
+}
+
+const resultText = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: '#334155',
+}
+
+const resultBarTrack = {
+  width: 'min(220px, 100%)',
+  height: 12,
+  background: '#e2e8f0',
+  borderRadius: 999,
+  overflow: 'hidden',
+}
+
+const resultBarFill = {
+  height: 12,
+  borderRadius: 999,
+}
+
+const resultCaption = {
+  fontSize: 13,
+  fontWeight: 800,
+  color: '#64748b',
+}
+
+const resultActions = {
+  display: 'flex',
+  gap: 10,
+  flexWrap: 'wrap',
+  justifyContent: 'center',
 }

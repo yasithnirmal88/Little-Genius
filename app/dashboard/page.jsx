@@ -5,118 +5,145 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
+const RANKS = [
+  'Science Cadet',
+  'Spark Explorer',
+  'Atom Scout',
+  'Bio Ranger',
+  'Geo Pioneer',
+  'Quantum Apprentice',
+  'Stellar Knight',
+  'Nova Commander',
+  'Spark Admiral',
+  'Supreme Spark Commander',
+]
+
+const TAB_ITEMS = [
+  { id: 'home', label: 'Home', icon: '1F31F' },
+  { id: 'path', label: 'Learn', icon: '1F333' },
+  { id: 'progress', label: 'Progress', icon: '1F3C6' },
+  { id: 'ranks', label: 'Ranks', icon: '1F451' },
+  { id: 'me', label: 'Me', icon: '1F9D1' },
+]
+
+const HOME_AVATAR_SEEDS = ['Alek', 'Liam', 'Nova', 'Maya', 'Ivy', 'Kai']
+const FRIEND_SEEDS = ['Alek', 'Liam', 'Ava', 'Nia']
+
+const ACHIEVEMENTS = [
+  { id: 'rocket', label: 'Rocket', icon: '1F680' },
+  { id: 'dna', label: 'DNA', icon: '1F9EC' },
+  { id: 'energy', label: 'Energy', icon: '26A1' },
+  { id: 'planet', label: 'Planet', icon: '1F30D' },
+]
+
+function dicebear(seed, background = 'b6e3f4') {
+  return `https://api.dicebear.com/9.x/adventurer/svg?seed=${encodeURIComponent(seed)}&backgroundColor=${background}`
+}
+
+function openMoji(hex) {
+  return `https://raw.githubusercontent.com/hfg-gmuend/openmoji/master/color/svg/${hex}.svg`
+}
+
+function getProfileSeed(profile) {
+  return profile?.username || profile?.email || 'Little Genius'
+}
+
+function getUnlockedModule(modules, progress, unlockedMods) {
+  const ordered = [...modules].sort((a, b) => a.sort_order - b.sort_order)
+  return ordered.find((mod) => !mod.locked || unlockedMods[mod.id] || (progress[mod.id]?.stars || 0) > 0) || ordered[0] || null
+}
+
+function getModuleStars(progress, moduleId) {
+  return progress[moduleId]?.stars || 0
+}
+
+function getTierLabel(mod) {
+  return `Tier ${mod.tier}`
+}
+
+function rankIndex(rank) {
+  const index = RANKS.indexOf(rank)
+  return index >= 0 ? index : 0
+}
+
+function textClamp(lines) {
+  return {
+    display: '-webkit-box',
+    WebkitLineClamp: lines,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  }
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [modules, setModules] = useState([])
   const [lessons, setLessons] = useState([])
   const [quizzes, setQuizzes] = useState([])
-  const [steps, setSteps] = useState([])
   const [shorts, setShorts] = useState([])
   const [progress, setProgress] = useState({})
   const [unlockedMods, setUnlockedMods] = useState({})
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('path')
-  const [selMod, setSelMod] = useState(null)
-  const [selShort, setSelShort] = useState(null)
-  const [voted, setVoted] = useState(null)
+  const [tab, setTab] = useState('home')
+  const [selectedModule, setSelectedModule] = useState(null)
+  const [selectedShort, setSelectedShort] = useState(null)
+  const [battleChoice, setBattleChoice] = useState(null)
 
   useEffect(() => {
     loadData()
   }, [])
 
   async function loadData() {
-    const { data: { user: authUser } } = await supabase.auth.getUser()
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser()
+
     if (!authUser) {
       router.push('/login')
       return
     }
-    setUser(authUser)
 
-    const { data: prof } = await supabase
-      .from('users')
-      .select('*')
-      .eq('auth_id', authUser.id)
-      .single()
+    const { data: prof } = await supabase.from('users').select('*').eq('auth_id', authUser.id).single()
     setProfile(prof)
 
-    const { data: mods } = await supabase
-      .from('modules')
-      .select('*')
-      .eq('status', 'published')
-      .order('sort_order', { ascending: true })
+    const { data: mods } = await supabase.from('modules').select('*').eq('status', 'published').order('sort_order', { ascending: true })
+    const { data: ls } = await supabase.from('lessons').select('*').order('step_number')
+    const { data: qs } = await supabase.from('quizzes').select('*, quiz_questions(*)')
+    const { data: sh } = await supabase.from('shorts').select('*').eq('status', 'published')
+
     setModules(mods || [])
-
-    const { data: ls } = await supabase
-      .from('lessons')
-      .select('*')
-      .order('step_number')
     setLessons(ls || [])
-
-    const { data: qs } = await supabase
-      .from('quizzes')
-      .select('*, quiz_questions(*)')
     setQuizzes(qs || [])
-
-    const { data: sh } = await supabase
-      .from('shorts')
-      .select('*')
-      .eq('status', 'published')
     setShorts(sh || [])
 
-    const progMap = {}
+    const progressMap = {}
     if (prof) {
-      const { data: prog } = await supabase
-        .from('user_progress')
-        .select('*')
-        .eq('user_id', prof.id)
-      ;(prog || []).forEach((p) => {
-        progMap[p.module_id] = p
+      const { data: prog } = await supabase.from('user_progress').select('*').eq('user_id', prof.id)
+      ;(prog || []).forEach((item) => {
+        progressMap[item.module_id] = item
       })
-      setProgress(progMap)
     }
+    setProgress(progressMap)
 
-    // Auto-unlock: if all published modules in a tier have 3 stars, unlock next tier
     const unlocked = {}
-    const tiers = [...new Set(mods.map((m) => m.tier))].sort((a, b) => a - b)
-    let prevTierComplete = true
-    tiers.forEach((tier) => {
-      const tierMods = mods.filter((m) => m.tier === tier && m.status === 'published')
-      const allComplete = tierMods.every((m) => (progMap[m.id]?.stars || 0) >= 3)
-      tierMods.forEach((m) => {
-        unlocked[m.id] = prevTierComplete
+    const tierValues = [...new Set((mods || []).map((mod) => mod.tier))].sort((a, b) => a - b)
+    let previousTierComplete = true
+
+    tierValues.forEach((tier) => {
+      const tierModules = (mods || []).filter((mod) => mod.tier === tier && mod.status === 'published')
+      const allComplete = tierModules.every((mod) => (progressMap[mod.id]?.stars || 0) >= 3)
+
+      tierModules.forEach((mod) => {
+        unlocked[mod.id] = previousTierComplete
       })
-      prevTierComplete = allComplete
+
+      previousTierComplete = allComplete
     })
+
     setUnlockedMods(unlocked)
-
-    // Build flat steps from all modules
-    const allSteps = []
-    const lessonsData = ls || []
-    const quizzesData = qs || []
-    mods.forEach((mod) => {
-      const modLessons = lessonsData.filter((l) => l.module_id === mod.id).sort((a, b) => a.step_number - b.step_number)
-      const modQuizzes = quizzesData.filter((q) => q.module_id === mod.id)
-      const locked = mod.locked && !unlocked[mod.id] && (progMap[mod.id]?.stars || 0) === 0
-      const modProgress = progMap[mod.id]
-      const stars = modProgress?.stars || 0
-      modLessons.forEach((lesson) => {
-        const lessonQuiz = modQuizzes.find((q) => q.lesson_id === lesson.id)
-        const stepCompleted = stars >= (lesson.step_number || 1)
-        allSteps.push({ type: 'video', mod, lesson, lessonQuiz, stepNumber: lesson.step_number, stepCompleted, locked, stars, modProgress })
-        if (lesson.knowledge_text) {
-          allSteps.push({ type: 'knowledge', mod, lesson, lessonQuiz, stepNumber: lesson.step_number, stepCompleted, locked, stars, modProgress })
-        }
-        if (lessonQuiz) {
-          allSteps.push({ type: 'quiz', mod, lesson, quiz: lessonQuiz, stepNumber: lesson.step_number, stepCompleted, locked, stars, modProgress })
-        }
-      })
-    })
-    setSteps(allSteps)
-
     setLoading(false)
   }
 
@@ -128,927 +155,1240 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div
-        style={{
-          width: '100%',
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#f0f4ff',
-          fontSize: 18,
-          color: '#667eea',
-        }}
-      >
-        🚀 Loading…
+      <div style={loadingShell}>
+        <div style={loadingCard}>
+          <img src={openMoji('1F52C')} alt="" width="72" height="72" />
+          <div style={{ fontSize: 18, fontWeight: 900, color: '#334155' }}>Loading Little Genius...</div>
+        </div>
       </div>
     )
   }
 
-  const TABS = [
-    { id: 'path', icon: '🗺️', label: 'Path' },
-    { id: 'shorts', icon: '▶️', label: 'Shorts' },
-    { id: 'battle', icon: '⚔️', label: 'Battle' },
-    { id: 'ranks', icon: '🏅', label: 'Ranks' },
-    { id: 'profile', icon: '👤', label: 'Me' },
-  ]
+  const firstModule = getUnlockedModule(modules, progress, unlockedMods)
+  const completedModules = modules.filter((mod) => getModuleStars(progress, mod.id) >= 3).length
+  const currentRankIndex = rankIndex(profile?.rank)
+  const featuredShorts = shorts.slice(0, 3)
+  const nextModules = modules.slice(0, 6)
 
   return (
-    <div
-      style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        position: 'relative',
-        background: '#f0f4ff',
-        minHeight: '100vh',
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          background: 'white',
-          padding: 'clamp(10px, 2vw, 16px) clamp(12px, 3vw, 24px)',
-          borderBottom: '1px solid #eee',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{
-            fontWeight: 800,
-            fontSize: 'clamp(16px, 3vw, 20px)',
-            background: 'linear-gradient(90deg,#667eea,#e17055)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}
-        >
-          🔬 Little Genius
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <span
-            style={{
-              background: '#fff9e6',
-              border: '1.5px solid #FFD700',
-              borderRadius: 20,
-              padding: '3px 8px',
-              fontWeight: 700,
-              color: '#f9ca24',
-              fontSize: 12,
-            }}
-          >
-            ⭐ {profile?.xp?.toLocaleString() || '0'}
-          </span>
-          <span
-            style={{
-              background: '#fff5f0',
-              border: '1.5px solid #e17055',
-              borderRadius: 20,
-              padding: '3px 8px',
-              fontWeight: 700,
-              color: '#e17055',
-              fontSize: 12,
-            }}
-          >
-            🔥 {profile?.streak || '0'}
-          </span>
-        </div>
-      </div>
+    <div style={screenShell}>
+      <div style={skyCloudLeft} />
+      <div style={skyCloudRight} />
 
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-        {tab === 'path' && <PathTab steps={steps} modules={modules} progress={progress} onSelect={(mod) => router.push(`/module/${mod.id}`)} profile={profile} unlockedMods={unlockedMods} />}
-        {tab === 'shorts' && (
-          <div style={{ padding: 'clamp(12px, 2vw, 24px)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ fontWeight: 700, fontSize: 'clamp(14px, 2.5vw, 18px)' }}>⚡ Science Shorts</div>
-            {shorts.map((s) => (
-              <div
-                key={s.id}
-                onClick={() => setSelShort(s)}
-                style={{
-                  background: 'linear-gradient(135deg,#2d3436,#636e72)',
-                  borderRadius: 'clamp(12px, 2vw, 16px)',
-                  padding: 'clamp(12px, 2vw, 20px)',
-                  color: 'white',
-                  cursor: 'pointer',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <Badge color="#A29BFE">{s.domain}</Badge>
-                  <Badge color="#FFD700">+10 XP</Badge>
-                </div>
-                <div style={{ fontWeight: 700, fontSize: 'clamp(13px, 2vw, 16px)', marginBottom: 6 }}>{s.title}</div>
-                <div style={{ fontSize: 'clamp(16px, 3vw, 22px)', textAlign: 'center', padding: '8px 0' }}>▶️</div>
-                <div style={{ fontSize: 'clamp(10px, 1.5vw, 12px)', opacity: 0.6, marginTop: 4, textAlign: 'right' }}>{s.duration}</div>
-              </div>
-            ))}
-          </div>
-        )}
-        {tab === 'battle' && (
-          <div style={{ padding: 'clamp(12px, 2vw, 24px)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ fontWeight: 700, fontSize: 'clamp(14px, 2.5vw, 18px)' }}>⚔️ Science Battle</div>
-            <div
-              style={{
-                background: 'linear-gradient(135deg,#e17055,#d63031)',
-                borderRadius: 'clamp(12px, 2vw, 16px)',
-                padding: 'clamp(12px, 2vw, 20px)',
-                color: 'white',
-                textAlign: 'center',
+      <div style={appFrame}>
+        <HeaderBar
+          profile={profile}
+          title={TAB_ITEMS.find((item) => item.id === tab)?.label || 'Home'}
+          avatarSeed={getProfileSeed(profile)}
+        />
+
+        <div style={contentShell}>
+          {tab === 'home' && (
+            <HomeTab
+              profile={profile}
+              featuredShorts={featuredShorts}
+              onPickShort={setSelectedShort}
+              onPlay={() => {
+                if (firstModule) router.push(`/module/${firstModule.id}`)
               }}
-            >
-              <div style={{ fontSize: 'clamp(11px, 1.5vw, 13px)', opacity: 0.8 }}>MODULE 3 — STAR 3</div>
-              <div style={{ fontWeight: 700, fontSize: 'clamp(14px, 2.5vw, 18px)', marginTop: 4 }}>
-                "Is a virus alive or not alive?"
-              </div>
-            </div>
-            {!voted ? (
-              <div style={{ display: 'flex', gap: 10 }}>
-                {['🦠 ALIVE', '💀 NOT ALIVE'].map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setVoted(v)}
-                    style={{
-                      flex: 1,
-                      padding: '18px 8px',
-                      border: '2px solid #e17055',
-                      borderRadius: 14,
-                      background: 'white',
-                      fontWeight: 700,
-                      fontSize: 'clamp(12px, 2vw, 14px)',
-                      cursor: 'pointer',
-                      color: '#e17055',
-                    }}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div
-                  style={{
-                    background: '#00b894',
-                    borderRadius: 12,
-                    padding: 12,
-                    color: 'white',
-                    fontWeight: 700,
-                    textAlign: 'center',
-                  }}
-                >
-                  ✅ Voted: {voted}
-                </div>
-                {[
-                  ['🦠 ALIVE', 'Viruses evolve and adapt.', '#A29BFE'],
-                  ['💀 NOT ALIVE', "Can't survive without a host.", '#fd79a8'],
-                ].map(([s, t, c]) => (
-                  <div
-                    key={s}
-                    style={{
-                      background: `${c}22`,
-                      border: `1.5px solid ${c}`,
-                      borderRadius: 12,
-                      padding: 12,
-                    }}
-                  >
-                    <div style={{ fontWeight: 700, fontSize: 12, color: c }}>{s}</div>
-                    <div style={{ fontSize: 'clamp(12px, 1.5vw, 14px)', marginTop: 4 }}>{t}</div>
-                  </div>
-                ))}
-                <div
-                  style={{
-                    background: '#00b89422',
-                    borderRadius: 12,
-                    padding: 12,
-                    textAlign: 'center',
-                    fontWeight: 700,
-                    color: '#00b894',
-                  }}
-                >
-                  +25 XP earned! 🎉
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        {tab === 'ranks' && (
-          <RanksTab profile={profile} />
-        )}
-        {tab === 'profile' && (
-          <ProfileTab profile={profile} onLogout={handleLogout} />
-        )}
+            />
+          )}
+
+          {tab === 'path' && (
+            <PathTab
+              modules={nextModules}
+              progress={progress}
+              unlockedMods={unlockedMods}
+              onOpenModule={setSelectedModule}
+            />
+          )}
+
+          {tab === 'progress' && (
+            <ProgressTab
+              profile={profile}
+              completedModules={completedModules}
+              modules={modules.length}
+              battleChoice={battleChoice}
+              onBattlePick={setBattleChoice}
+            />
+          )}
+
+          {tab === 'ranks' && <RanksTab profile={profile} />}
+
+          {tab === 'me' && <ProfileTab profile={profile} onLogout={handleLogout} />}
+        </div>
+
+        <BottomTabs activeTab={tab} onChange={setTab} />
       </div>
 
-      {/* Bottom Nav */}
-      <div
-        style={{
-          background: 'white',
-          borderTop: '1px solid #eee',
-          display: 'flex',
-          flexShrink: 0,
-        }}
-      >
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            style={{
-              flex: 1,
-              padding: 'clamp(8px, 1.5vw, 12px) 0',
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 2,
-              color: tab === t.id ? '#667eea' : '#aaa',
-            }}
-          >
-            <span style={{ fontSize: 'clamp(16px, 3vw, 22px)' }}>{t.icon}</span>
-            <span style={{ fontSize: 'clamp(9px, 1.2vw, 11px)', fontWeight: tab === t.id ? 700 : 400 }}>
-              {t.label}
-            </span>
-            {tab === t.id && (
-              <div style={{ width: 4, height: 4, background: '#667eea', borderRadius: 2 }} />
-            )}
+      {selectedModule && (
+        <ModuleSheet
+          mod={selectedModule}
+          stars={getModuleStars(progress, selectedModule.id)}
+          lessonCount={lessons.filter((lesson) => lesson.module_id === selectedModule.id).length}
+          quizCount={quizzes.filter((quiz) => quiz.module_id === selectedModule.id).length}
+          onClose={() => setSelectedModule(null)}
+          onStart={() => router.push(`/module/${selectedModule.id}`)}
+        />
+      )}
+
+      {selectedShort && <ShortPlayer short={selectedShort} onClose={() => setSelectedShort(null)} />}
+    </div>
+  )
+}
+
+function HeaderBar({ profile, title, avatarSeed }) {
+  return (
+    <div style={headerBar}>
+      <div style={brandStack}>
+        <div style={brandBadge}>
+          <img src={openMoji('1F4A1')} alt="" width="22" height="22" />
+          <span>Little Genius</span>
+        </div>
+        <div style={pageTitle}>{title}</div>
+      </div>
+
+      <div style={headerChips}>
+        <StatPill icon="2B50" value={profile?.xp?.toLocaleString() || '0'} />
+        <StatPill icon="1F525" value={profile?.streak || '0'} />
+        <img src={dicebear(avatarSeed, 'c0aede')} alt="" width="42" height="42" style={avatarBubble} />
+      </div>
+    </div>
+  )
+}
+
+function HomeTab({ profile, featuredShorts, onPickShort, onPlay }) {
+  const selectedAvatar = getProfileSeed(profile)
+
+  return (
+    <div style={tabStack}>
+      <Panel color="#6ea8fe" border="#4f83e3">
+        <div style={{ ...stack12, alignItems: 'center', textAlign: 'center' }}>
+          <StatusStrip profile={profile} />
+          <div style={heroTitle}>Welcome!</div>
+          <div style={heroSubtitle}>Pick an avatar and start your next science mission.</div>
+
+          <div style={avatarGrid}>
+            {HOME_AVATAR_SEEDS.map((seed) => {
+              const active = selectedAvatar.toLowerCase().includes(seed.toLowerCase())
+              return (
+                <div key={seed} style={{ ...avatarChoice, borderColor: active ? '#2563eb' : '#ffffff' }}>
+                  <img src={dicebear(seed, 'ffd5dc')} alt={seed} width="84" height="84" style={avatarChoiceImage} />
+                  <div style={avatarLabel}>{seed}</div>
+                </div>
+              )
+            })}
+          </div>
+
+          <button onClick={onPlay} style={playButton}>
+            Play
+          </button>
+        </div>
+      </Panel>
+
+      <SectionTitle icon="1F39E" label="Featured Shorts" />
+      <div style={cardGrid}>
+        {featuredShorts.map((short, index) => (
+          <button key={short.id} onClick={() => onPickShort(short)} style={{ ...softCard, textAlign: 'left', background: shortCardColors[index % shortCardColors.length] }}>
+            <div style={shortHeader}>
+              <Badge label={short.domain} />
+              <span style={xpChip}>+10 XP</span>
+            </div>
+            <div style={shortTitle}>{short.title}</div>
+            <div style={shortMeta}>
+              <img src={openMoji(index === 0 ? '1F680' : index === 1 ? '1F52D' : '1F30B')} alt="" width="36" height="36" />
+              <span>{short.duration}</span>
+            </div>
           </button>
         ))}
       </div>
-
-      {selMod && <ModuleModal mod={selMod} progress={progress[selMod.id]} onClose={() => setSelMod(null)} />}
-      {selShort && <ShortPlayer short={selShort} onClose={() => setSelShort(null)} />}
     </div>
   )
 }
 
-// ─── PATH TAB (Duolingo-style glossy 3D steps) ──────────────────────
-function IconPlay({ size = 22 }) {
+function PathTab({ modules, progress, unlockedMods, onOpenModule }) {
   return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="6 3 20 12 6 21 6 3" />
-    </svg>
-  )
-}
-function IconBook({ size = 22 }) {
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-    </svg>
-  )
-}
-function IconQuiz({ size = 22 }) {
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  )
-}
-function IconLock({ size = 22 }) {
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  )
-}
-function IconCheck({ size = 22 }) {
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  )
-}
-function IconStar({ size = 22 }) {
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="#FFD700" stroke="#FFD700" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-    </svg>
-  )
-}
+    <div style={{ ...tabStack, paddingBottom: 28 }}>
+      <SectionTitle icon="1F333" label="Learn Path" />
+      <div style={pathScrollArea}>
+        <div style={pathTrunk} />
+        {modules.map((mod, index) => {
+          const locked = mod.locked && !unlockedMods[mod.id] && getModuleStars(progress, mod.id) === 0
+          const stars = getModuleStars(progress, mod.id)
+          const offsetStyle = index % 2 === 0 ? pathCardLeft : pathCardRight
 
-function darken(hex, amount = 0.35) {
-  const r = parseInt(hex.slice(1,3), 16)
-  const g = parseInt(hex.slice(3,5), 16)
-  const b = parseInt(hex.slice(5,7), 16)
-  const f = 1 - amount
-  return `#${Math.floor(r*f).toString(16).padStart(2,'0')}${Math.floor(g*f).toString(16).padStart(2,'0')}${Math.floor(b*f).toString(16).padStart(2,'0')}`
-}
-
-function PathTab({ steps, modules, progress, onSelect, profile, unlockedMods }) {
-  const [isDesktop, setIsDesktop] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 768px)')
-    setIsDesktop(mq.matches)
-    const handler = (e) => setIsDesktop(e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
-
-  const nodeColors = ['#1CB0F6', '#FFC800', '#8B5CF6', '#FF4B82', '#00B894', '#FD79A8', '#6C5CE7', '#00CEC9']
-
-  const SCALE = isDesktop ? 1.35 : 1
-  const ICON_SIZE = Math.round(22 * SCALE)
-  const NODE_R = Math.round(34 * SCALE)
-  const AMPLITUDE = Math.round(65 * SCALE)
-  const V_SPACING = Math.round(150 * SCALE)
-  const CENTER_X = Math.round(160 * SCALE)
-  const START_Y = 50
-  const STEP_MARGIN = isDesktop ? 48 : 40
-
-  const moduleLabels = {}
-  steps.forEach((s) => {
-    if (!moduleLabels[s.mod.id]) moduleLabels[s.mod.id] = { mod: s.mod, count: 0, done: 0 }
-    moduleLabels[s.mod.id].count++
-    if (s.stars > 0) moduleLabels[s.mod.id].done++
-  })
-
-  const iconMap = { video: <IconPlay size={ICON_SIZE} />, knowledge: <IconBook size={ICON_SIZE} />, quiz: <IconQuiz size={ICON_SIZE} /> }
-  const stepLabels = { video: 'Watch', knowledge: 'Learn', quiz: 'Quiz' }
-
-  // Compute node positions using sine wave
-  const nodes = steps.map((s, i) => ({
-    x: CENTER_X + Math.sin(i * 0.9) * AMPLITUDE,
-    y: START_Y + i * V_SPACING,
-  }))
-
-  // First incomplete step is "active"
-  const activeIdx = steps.findIndex(s => !s.locked && !s.stepCompleted)
-
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', background: '#0B0E2A', position: 'relative' }}>
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
-        {Array.from({ length: 60 }).map((_, i) => (
-          <div key={i} style={{
-            position: 'absolute',
-            left: `${(i * 37 + 13) % 100}%`,
-            top: `${(i * 53 + 7) % 100}%`,
-            width: i % 5 === 0 ? 3 : 1.5,
-            height: i % 5 === 0 ? 3 : 1.5,
-            borderRadius: '50%',
-            background: i % 7 === 0 ? '#FFD700' : i % 3 === 0 ? '#A29BFE' : '#FFFFFF',
-            opacity: 0.4 + (i % 4) * 0.15,
-            boxShadow: i % 5 === 0 ? '0 0 6px rgba(255,255,255,0.4)' : 'none',
-          }} />
-        ))}
-        {[1, 2, 3].map((n) => (
-          <div key={`g${n}`} style={{
-            position: 'absolute', right: `${5 + n * 20}%`, top: `${15 + n * 25}%`,
-            width: `${40 + n * 20}px`, height: `${40 + n * 20}px`,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(162,155,254,0.08) 0%, transparent 70%)',
-            pointerEvents: 'none',
-          }} />
-        ))}
-        {[1, 2].map((n) => (
-          <div key={`s${n}`} style={{
-            position: 'absolute', left: `${5 + n * 30}%`, bottom: `${10 + n * 20}%`,
-            width: '120px', height: '60px',
-            borderRadius: '50%',
-            background: 'radial-gradient(ellipse, rgba(255,200,0,0.05) 0%, transparent 70%)',
-            transform: 'rotate(-20deg)',
-            pointerEvents: 'none',
-          }} />
-        ))}
-      </div>
-
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '12px 16px 8px',
-        }}>
-          <div style={pillStyle('#FF9600')}><span style={{fontSize:16}}>🔥</span> {profile?.streak || '0'}</div>
-          <div style={pillStyle('#1CB0F6')}><span style={{fontSize:16}}>💎</span> {profile?.xp?.toLocaleString() || '0'}</div>
-          <div style={pillStyle('#FF4B82')}><span style={{fontSize:16}}>⚡</span> 25</div>
-          <div style={{ flex: 1 }} />
-        </div>
-
-        <div style={{
-          background: 'linear-gradient(180deg,#1a1040 0%,#2d1b69 100%)',
-          margin: '0 14px 8px', borderRadius: 16, padding: '14px 18px',
-          color: 'white', display: 'flex', justifyContent: 'space-between',
-          alignItems: 'center', boxShadow: '0 4px 0 rgba(0,0,0,0.3)',
-        }}>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.85, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-              {profile?.rank || 'Science Cadet'}
-            </div>
-            <div style={{ fontSize: 17, fontWeight: 800, marginTop: 2 }}>
-              🚀 {profile?.username || 'Explorer'}
-            </div>
-          </div>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10,
-            background: 'rgba(255,255,255,0.12)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 16, cursor: 'pointer',
-          }}>
-            ☰
-          </div>
-        </div>
-
-        <div style={{
-          position: 'relative', padding: '20px 0 60px',
-          maxWidth: isDesktop ? 700 : 420, margin: '0 auto',
-        }}>
-
-          {steps.map((step, i) => {
-            const prevModId = i > 0 ? steps[i - 1].mod.id : null
-            const showModuleLabel = i === 0 || step.mod.id !== prevModId
-            const locked = step.locked && !step.modProgress
-            const colorIdx = i % nodeColors.length
-            const nodeColor = nodeColors[colorIdx]
-            const fill = locked ? '#2A2A4A' : nodeColor
-            const shadow = locked ? '#1A1A3A' : darken(nodeColor)
-            const isActive = i === activeIdx && !locked && !step.stepCompleted
-            const icon = locked ? <IconLock size={ICON_SIZE} /> : step.stepCompleted ? <IconStar size={ICON_SIZE} /> : iconMap[step.type] || <IconPlay size={ICON_SIZE} />
-            const pos = nodes[i]
-            const offsetPx = pos.x - CENTER_X
-
-            return (
-              <div key={`${step.mod.id}-${i}`}>
-                {showModuleLabel && (
-                  <div style={{
-                    display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6,
-                    margin: '6px 0 2px',
-                  }}>
-                    <span style={{
-                      fontSize: isDesktop ? 20 : 16, background: 'rgba(255,255,255,0.06)',
-                      borderRadius: 10, padding: '3px 10px',
-                    }}>
-                      <span style={{ marginRight: 4 }}>{step.mod.emoji}</span>
-                      <span style={{ fontSize: isDesktop ? 15 : 12, fontWeight: 800, color: '#C8C8E6' }}>{step.mod.title}</span>
-                    </span>
-                  </div>
-                )}
-                <div style={{
-                  display: 'flex', justifyContent: 'center', alignItems: 'center',
-                  paddingLeft: offsetPx > 0 ? `${offsetPx}px` : '0',
-                  paddingRight: offsetPx < 0 ? `${-offsetPx}px` : '0',
-                  position: 'relative', zIndex: 1, margin: `${STEP_MARGIN}px 0`,
-                }}>
-                  <button
-                    onClick={() => !locked && onSelect(step.mod)}
-                    disabled={locked}
-                    style={{
-                      width: NODE_R * 2, height: NODE_R * 2,
-                      borderRadius: '50%', border: isActive ? `3px solid ${nodeColor}` : 'none',
-                      cursor: locked ? 'not-allowed' : 'pointer',
-                      position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: fill,
-                      boxShadow: isActive
-                        ? `0 6px 0 ${shadow}, 0 0 0 4px ${nodeColor}33, 0 0 24px ${nodeColor}66`
-                        : `0 6px 0 ${shadow}`,
-                      transition: 'transform 0.15s',
-                    }}
-                  >
-                    <div style={{
-                      position: 'absolute', top: Math.round(6 * SCALE), left: Math.round(10 * SCALE),
-                      width: Math.round(28 * SCALE), height: Math.round(14 * SCALE), borderRadius: '50%',
-                      background: 'rgba(255,255,255,0.3)',
-                      pointerEvents: 'none',
-                    }} />
-                    <span style={{
-                      position: 'relative', zIndex: 2,
-                      opacity: locked ? 0.4 : 1,
-                      filter: locked ? 'grayscale(1)' : 'none',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      {icon}
-                    </span>
-                  </button>
-                </div>
-                <div style={{
-                  display: 'flex', justifyContent: 'center',
-                  paddingLeft: offsetPx > 0 ? `${offsetPx}px` : '0',
-                  paddingRight: offsetPx < 0 ? `${-offsetPx}px` : '0',
-                  marginTop: -2,
-                }}>
-                  <div style={{
-                    fontSize: isDesktop ? 13 : 10, fontWeight: 700, color: locked ? '#555' : '#C8C8E6',
-                    maxWidth: isDesktop ? 160 : 120, textAlign: 'center',
-                    overflow: 'hidden', lineHeight: 1.3,
-                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                    wordBreak: 'break-word',
-                  }}>
-                    {stepLabels[step.type]} {step.lesson?.title || ''}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-
-          <div style={{ textAlign: 'center', padding: '8px 0 24px', color: '#555', fontSize: 12, fontWeight: 600 }}>
-            🚀 Keep exploring the universe!
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function pillStyle(accent) {
-  return {
-    display: 'inline-flex', alignItems: 'center', gap: 4,
-    fontWeight: 800, fontSize: 14, color: '#3C3C3C',
-    background: 'white', borderRadius: 20,
-    padding: '4px 12px', boxShadow: '0 2px 4px rgba(0,0,0,0.06)',
-  }
-}
-
-// ─── MODULE MODAL ───────────────────────────────────────────────────────
-function ModuleModal({ mod, progress, onClose }) {
-  const router = useRouter()
-  const [tab, setTab] = useState('overview')
-  if (!mod) return null
-
-  const stars = progress?.stars || 0
-
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,.5)',
-        display: 'flex',
-        alignItems: 'flex-end',
-        zIndex: 100,
-      }}
-      onClick={onClose}
-    >
-      <div
-        style={{
-          background: 'white',
-          borderRadius: '24px 24px 0 0',
-          width: '100%',
-          padding: 20,
-          maxHeight: '75%',
-          overflowY: 'auto',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div
-          style={{
-            width: 40,
-            height: 4,
-            background: '#ddd',
-            borderRadius: 2,
-            margin: '0 auto 16px',
-          }}
-        />
-        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>
-          {mod.emoji} {mod.title}
-        </div>
-        <StarRow count={stars} />
-        <div style={{ display: 'flex', gap: 8, margin: '14px 0' }}>
-          {['overview', 'stars', 'xp'].map((t) => (
+          return (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={mod.id}
+              onClick={() => !locked && onOpenModule(mod)}
               style={{
-                flex: 1,
-                padding: '8px 0',
-                border: 'none',
-                borderRadius: 10,
-                background: tab === t ? '#667eea' : '#f0f0f0',
-                color: tab === t ? 'white' : '#555',
-                fontWeight: 600,
-                fontSize: 12,
-                cursor: 'pointer',
+                ...pathNodeCard,
+                ...offsetStyle,
+                opacity: locked ? 0.6 : 1,
+                cursor: locked ? 'not-allowed' : 'pointer',
               }}
             >
-              {t === 'xp' ? 'XP & Rewards' : t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
-        </div>
-        {tab === 'overview' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {[
-              '📹 Short video (30–60s)',
-              '🧠 5-Question Quiz',
-              '📹 Short video #2',
-              '🧠 5-Question Quiz',
-              '📹 Short video #3',
-              '🧠 8-Question Quiz + ⚔️ Science Battle',
-            ].map((s, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  gap: 10,
-                  alignItems: 'center',
-                  padding: '10px 12px',
-                  background: i < stars * 2 ? '#f0fff4' : '#fafafa',
-                  borderRadius: 10,
-                  border: '1.5px solid ' + (i < stars * 2 ? '#00b894' : '#eee'),
-                  fontSize: 13,
-                }}
-              >
-                <span>{i < stars * 2 ? '✅' : '⭕'}</span>
-                <span>{s}</span>
+              <div style={pathNodeTop}>
+                <span style={pathTier}>{getTierLabel(mod)}</span>
+                <StarRow count={stars} />
               </div>
-            ))}
-          </div>
-        )}
-        {tab === 'stars' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {[
-              ['⭐ Star 1', 'Watch Short + 5-Question Quiz'],
-              ['⭐ Star 2', 'Watch Short + 5-Question Quiz'],
-              ['⭐ Star 3', 'Watch Short + 8-Question Quiz + Science Battle'],
-            ].map(([star, desc], i) => (
-              <div
-                key={star}
-                style={{
-                  background: i < stars ? '#fff9e6' : '#fafafa',
-                  border: '1.5px solid ' + (i < stars ? '#FFD700' : '#eee'),
-                  borderRadius: 12,
-                  padding: 12,
-                }}
-              >
-                <div style={{ fontWeight: 700, color: i < stars ? '#f9ca24' : '#aaa' }}>
-                  {star} {i < stars ? '✅' : ''}
+              <div style={pathNodeTitleRow}>
+                <span style={moduleEmojiBubble}>{mod.emoji || 'SCI'}</span>
+                <div>
+                  <div style={pathNodeTitle}>{mod.title}</div>
+                  <div style={pathNodeMeta}>{locked ? 'Locked until previous tier is complete' : 'Tap to continue'}</div>
                 </div>
-                <div style={{ fontSize: 13, color: '#636e72', marginTop: 4 }}>{desc}</div>
               </div>
-            ))}
-          </div>
-        )}
-        {tab === 'xp' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {[
-              ['Watch a Short', '+ 10 XP'],
-              ['Pass Quiz (Stars 1–2)', '+ 15 XP'],
-              ['Pass Quiz (Star 3)', '+ 25 XP'],
-              ['Science Battle', '+ 25 XP'],
-              ['Perfect Score', '+ 10 XP'],
-              ['Daily Login', '+ 5 XP/day'],
-            ].map(([a, x]) => (
-              <div
-                key={a}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '10px 14px',
-                  background: '#f8f8f8',
-                  borderRadius: 10,
-                  fontSize: 13,
-                }}
-              >
-                <span>{a}</span>
-                <span style={{ fontWeight: 700, color: '#00b894' }}>{x}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        <button
-          onClick={() => router.push(`/module/${mod.id}`)}
-          style={{
-            marginTop: 16,
-            width: '100%',
-            padding: 14,
-            background: 'linear-gradient(90deg,#667eea,#764ba2)',
-            color: 'white',
-            border: 'none',
-            borderRadius: 14,
-            fontWeight: 700,
-            fontSize: 15,
-            cursor: 'pointer',
-          }}
-        >
-          {stars === 0 ? 'Start Module 🚀' : stars >= 3 ? 'Review 📖' : 'Continue ▶'}
-        </button>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-// ─── SHORT PLAYER ─────────────────────────────────────────────────────
-function ShortPlayer({ short, onClose }) {
-  const isYouTube = short.video_url?.includes('youtube.com') || short.video_url?.includes('youtu.be')
-  let embedUrl = null
-  if (isYouTube) {
-    const match = short.video_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/)
-    if (match) embedUrl = `https://www.youtube.com/embed/${match[1]}`
-  }
+function ProgressTab({ profile, completedModules, modules, battleChoice, onBattlePick }) {
+  const profileRank = profile?.rank || RANKS[0]
+  const levelNumber = rankIndex(profileRank) + 1
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)',
-      display: 'flex', flexDirection: 'column', zIndex: 100,
-    }} onClick={onClose}>
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: 'clamp(10px, 2vw, 16px) clamp(12px, 3vw, 24px)',
-        color: 'white',
-      }}>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 'clamp(13px, 2vw, 16px)' }}>{short.title}</div>
-          <div style={{ fontSize: 'clamp(10px, 1.5vw, 12px)', opacity: .6 }}>{short.domain} · {short.duration}</div>
+    <div style={tabStack}>
+      <Panel color="#2f6fe4" border="#1d4fb5">
+        <div style={{ ...stack16, alignItems: 'center', textAlign: 'center', color: '#fff' }}>
+          <img src={openMoji('1F3C6')} alt="" width="82" height="82" />
+          <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 0.4 }}>TIER {levelNumber}</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{profileRank}</div>
+          <div style={{ fontSize: 18, fontWeight: 800 }}>Points: {profile?.xp?.toLocaleString() || '0'}</div>
+          <div style={progressCounterRow}>
+            <MiniCounter label="Modules" value={`${completedModules}/${modules}`} />
+            <MiniCounter label="Streak" value={profile?.streak || '0'} />
+            <MiniCounter label="Badges" value="4" />
+          </div>
         </div>
-        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: 24, cursor: 'pointer' }}>✕</button>
-      </div>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 clamp(12px, 3vw, 24px)' }} onClick={(e) => e.stopPropagation()}>
-        {embedUrl ? (
-          <div style={{ position: 'relative', paddingBottom: '56.25%', width: '100%', maxWidth: 800 }}>
-            <iframe
-              src={embedUrl}
-              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none', borderRadius: 12 }}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+      </Panel>
+
+      <SectionTitle icon="1F396" label="Achievements" />
+      <div style={achievementGrid}>
+        {ACHIEVEMENTS.map((achievement, index) => (
+          <div key={achievement.id} style={{ ...achievementCard, background: achievementColors[index] }}>
+            <img src={openMoji(achievement.icon)} alt="" width="46" height="46" />
+            <div style={achievementLabel}>{achievement.label}</div>
           </div>
-        ) : short.video_url ? (
-          <video controls style={{ width: '100%', maxWidth: 800, borderRadius: 12 }} src={short.video_url} />
+        ))}
+      </div>
+
+      <SectionTitle icon="2694" label="Science Battle" />
+      <div style={battleCard}>
+        <div style={battleQuestion}>Is a virus alive or not alive?</div>
+        {!battleChoice ? (
+          <div style={battleChoiceRow}>
+            <button onClick={() => onBattlePick('Alive')} style={battleButton}>Alive</button>
+            <button onClick={() => onBattlePick('Not Alive')} style={battleButton}>Not Alive</button>
+          </div>
         ) : (
-          <div style={{ textAlign: 'center', color: '#aaa', padding: 40 }}>
-            <div style={{ fontSize: 48, marginBottom: 8 }}>📹</div>
-            <div>Video not available</div>
+          <div style={battleResult}>
+            <div style={battlePicked}>You picked: {battleChoice}</div>
+            <div style={battleHint}>Great job. Now compare the evidence from both sides.</div>
           </div>
         )}
       </div>
-      <div style={{ textAlign: 'center', padding: 12, color: '#666', fontSize: 13 }}>
-        Tap anywhere outside to close
+    </div>
+  )
+}
+
+function RanksTab({ profile }) {
+  const currentIndex = rankIndex(profile?.rank)
+
+  return (
+    <div style={tabStack}>
+      <SectionTitle icon="1F451" label="Ranks Ladder" />
+
+      <div style={friendsRow}>
+        {FRIEND_SEEDS.map((seed) => (
+          <div key={seed} style={friendBubble}>
+            <img src={dicebear(seed, 'ffd966')} alt={seed} width="62" height="62" style={friendAvatar} />
+            <span style={friendName}>{seed}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={ladderStack}>
+        {[...RANKS].reverse().map((rank, reverseIndex) => {
+          const realIndex = RANKS.length - reverseIndex - 1
+          const isCurrent = realIndex === currentIndex
+          const width = `${72 + reverseIndex * 3}%`
+
+          return (
+            <div key={rank} style={{ ...ladderStep, width, background: ladderColors[reverseIndex % ladderColors.length], borderColor: isCurrent ? '#1d4ed8' : '#8b5a2b' }}>
+              <div style={ladderStepText}>
+                <div style={ladderTierLabel}>Tier {realIndex + 1}</div>
+                <div style={ladderRankName}>{rank}</div>
+              </div>
+              {isCurrent && (
+                <img src={dicebear(getProfileSeed(profile), 'c4b5fd')} alt="" width="72" height="72" style={ladderAvatar} />
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-// ─── STAR ROW ──────────────────────────────────────────────────────────
-function StarRow({ count, max = 3 }) {
-  return (
-    <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
-      {Array.from({ length: max }).map((_, i) => (
-        <span key={i} style={{ fontSize: 13 }}>
-          {i < count ? '⭐' : '☆'}
-        </span>
-      ))}
-    </div>
-  )
-}
-
-// ─── RANKS TAB ─────────────────────────────────────────────────────────
-function RanksTab({ profile }) {
-  const ranks = [
-    'Science Cadet',
-    'Spark Explorer',
-    'Atom Scout',
-    'Bio Ranger',
-    'Geo Pioneer',
-    'Quantum Apprentice',
-    'Stellar Knight',
-    'Nova Commander',
-    'Spark Admiral',
-    'Supreme Spark Commander',
-  ]
-
-  return (
-    <div style={{ padding: 'clamp(12px, 2vw, 24px)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontWeight: 700, fontSize: 'clamp(14px, 2.5vw, 18px)' }}>🏅 Rank Ladder</div>
-      {ranks.map((r, i) => {
-        const isCurrent = profile?.rank === r
-        return (
-          <div
-            key={r}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'clamp(8px, 1.5vw, 14px)',
-              background: isCurrent ? '#667eea11' : '#fafafa',
-              border: `1.5px solid ${isCurrent ? '#667eea' : '#eee'}`,
-              borderRadius: 12,
-              padding: 'clamp(8px, 1.5vw, 14px) clamp(10px, 2vw, 16px)',
-            }}
-          >
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                background: isCurrent ? '#667eea' : i < 1 ? '#00b894' : '#dfe6e9',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 700,
-                color: isCurrent || i < 1 ? 'white' : '#aaa',
-                fontSize: 12,
-              }}
-            >
-              {isCurrent ? '✓' : i + 1}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div
-                style={{
-                  fontWeight: 700,
-                  fontSize: 'clamp(12px, 2vw, 14px)',
-                  color: isCurrent ? '#667eea' : '#2d3436',
-                }}
-              >
-                {r}
-              </div>
-              <div style={{ fontSize: 'clamp(10px, 1.5vw, 12px)', color: '#aaa' }}>
-                Modules {i * 2 + 1}–{i * 2 + 2}
-              </div>
-            </div>
-            {isCurrent && (
-              <span
-                style={{
-                  fontSize: 'clamp(10px, 1.5vw, 12px)',
-                  background: '#667eea',
-                  color: 'white',
-                  borderRadius: 10,
-                  padding: '2px 8px',
-                }}
-              >
-                YOU
-              </span>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ─── PROFILE TAB ───────────────────────────────────────────────────────
 function ProfileTab({ profile, onLogout }) {
   return (
-    <div style={{ padding: 'clamp(12px, 2vw, 24px)', display: 'flex', flexDirection: 'column', gap: 'clamp(10px, 1.5vw, 16px)' }}>
-      <div
-        style={{
-          background: 'linear-gradient(135deg,#667eea,#764ba2)',
-          borderRadius: 'clamp(16px, 3vw, 24px)',
-          padding: 'clamp(16px, 3vw, 28px)',
-          color: 'white',
-          textAlign: 'center',
-        }}
-      >
-        <div style={{ fontSize: 'clamp(36px, 8vw, 52px)', marginBottom: 8 }}>🧑‍🚀</div>
-        <div style={{ fontWeight: 700, fontSize: 'clamp(16px, 3vw, 22px)' }}>
-          {profile?.username || 'CosmicNebula42'}
+    <div style={tabStack}>
+      <Panel color="#8ec5ff" border="#6197d8">
+        <div style={{ ...stack16, alignItems: 'center', textAlign: 'center' }}>
+          <img src={dicebear(getProfileSeed(profile), 'fecdd3')} alt="" width="110" height="110" style={profileAvatar} />
+          <div style={profileName}>{profile?.username || 'Science Cadet'}</div>
+          <div style={profileRank}>{profile?.rank || 'Science Cadet'}</div>
+
+          <div style={profileStatsGrid}>
+            <ProfileStat label="XP" value={profile?.xp?.toLocaleString() || '0'} />
+            <ProfileStat label="Streak" value={profile?.streak || '0'} />
+            <ProfileStat label="Modules" value={profile?.modules_completed || '0'} />
+          </div>
         </div>
-        <div style={{ fontSize: 'clamp(11px, 1.5vw, 13px)', opacity: 0.8 }}>
-          {profile?.rank || 'Science Cadet'}
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: 'clamp(16px, 4vw, 32px)',
-            marginTop: 'clamp(10px, 2vw, 16px)',
-          }}
-        >
-          {[
-            [profile?.xp?.toLocaleString() || '0', 'XP'],
-            [profile?.streak || '0', '🔥'],
-            [profile?.modules_completed || '0', 'Modules'],
-          ].map(([v, l]) => (
-            <div key={l}>
-              <div style={{ fontWeight: 700, fontSize: 'clamp(18px, 3vw, 24px)' }}>{v}</div>
-              <div style={{ fontSize: 'clamp(10px, 1.5vw, 12px)', opacity: 0.8 }}>{l}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <button
-        onClick={onLogout}
-        style={{
-          background: '#ff7675',
-          color: 'white',
-          border: 'none',
-          borderRadius: 'clamp(10px, 1.5vw, 14px)',
-          padding: 'clamp(10px, 2vw, 14px)',
-          fontWeight: 700,
-          fontSize: 'clamp(13px, 2vw, 15px)',
-          cursor: 'pointer',
-        }}
-      >
+      </Panel>
+
+      <button onClick={onLogout} style={logoutButton}>
         Log Out
       </button>
     </div>
   )
 }
 
-// ─── BADGE ─────────────────────────────────────────────────────────────
-function Badge({ color, children }) {
+function BottomTabs({ activeTab, onChange }) {
   return (
-    <span
-      style={{
-        background: `${color}22`,
-        color,
-        border: `1px solid ${color}44`,
-        borderRadius: 20,
-        padding: '2px 8px',
-        fontSize: 11,
-        fontWeight: 700,
-      }}
-    >
-      {children}
-    </span>
+    <div style={bottomTabs}>
+      {TAB_ITEMS.map((item) => {
+        const active = item.id === activeTab
+        return (
+          <button key={item.id} onClick={() => onChange(item.id)} style={{ ...tabButton, background: active ? '#fff3bf' : 'transparent', borderColor: active ? '#eab308' : 'transparent' }}>
+            <img src={openMoji(item.icon)} alt="" width="24" height="24" />
+            <span style={{ ...tabButtonLabel, color: active ? '#7c2d12' : '#475569' }}>{item.label}</span>
+          </button>
+        )
+      })}
+    </div>
   )
+}
+
+function SectionTitle({ icon, label }) {
+  return (
+    <div style={sectionTitle}>
+      <img src={openMoji(icon)} alt="" width="28" height="28" />
+      <span>{label}</span>
+    </div>
+  )
+}
+
+function StatusStrip({ profile }) {
+  const dots = [0, 1, 2, 3, 4, 5, 6]
+  const activeDots = Math.min(Number(profile?.streak || 0), dots.length)
+
+  return (
+    <div style={statusStrip}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <img src={openMoji('1F525')} alt="" width="24" height="24" />
+        <strong>{profile?.streak || 0} day streak</strong>
+      </div>
+      <div style={statusDots}>
+        {dots.map((dot, index) => (
+          <span key={dot} style={{ ...statusDot, background: index < activeDots ? '#fff' : '#f3d4c8' }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function StarRow({ count }) {
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      {[0, 1, 2].map((index) => (
+        <span key={index} style={{ color: index < count ? '#fbbf24' : '#e2e8f0', fontSize: 14 }}>
+          ★
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function StatPill({ icon, value }) {
+  return (
+    <div style={statPill}>
+      <img src={openMoji(icon)} alt="" width="18" height="18" />
+      <span>{value}</span>
+    </div>
+  )
+}
+
+function Badge({ label }) {
+  return <span style={badgeStyle}>{label}</span>
+}
+
+function Panel({ children, color, border }) {
+  return <div style={{ ...panelBase, background: color, borderColor: border }}>{children}</div>
+}
+
+function MiniCounter({ label, value }) {
+  return (
+    <div style={miniCounter}>
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </div>
+  )
+}
+
+function ProfileStat({ label, value }) {
+  return (
+    <div style={profileStatCard}>
+      <div style={profileStatValue}>{value}</div>
+      <div style={profileStatLabel}>{label}</div>
+    </div>
+  )
+}
+
+function ModuleSheet({ mod, stars, lessonCount, quizCount, onClose, onStart }) {
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div style={sheet} onClick={(event) => event.stopPropagation()}>
+        <div style={sheetHandle} />
+        <div style={sheetTitleRow}>
+          <span style={moduleEmojiBubble}>{mod.emoji || 'SCI'}</span>
+          <div>
+            <div style={sheetTitle}>{mod.title}</div>
+            <div style={sheetSubtitle}>{getTierLabel(mod)}</div>
+          </div>
+        </div>
+
+        <div style={sheetInfoGrid}>
+          <ProfileStat label="Stars" value={`${stars}/3`} />
+          <ProfileStat label="Lessons" value={lessonCount || 0} />
+          <ProfileStat label="Quizzes" value={quizCount || 0} />
+        </div>
+
+        <p style={sheetDescription}>{mod.description || 'Explore videos, quiz stars, and one Science Battle at the end of the module.'}</p>
+
+        <button onClick={onStart} style={primarySheetButton}>
+          {stars > 0 ? 'Continue Module' : 'Start Module'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ShortPlayer({ short, onClose }) {
+  const isYouTube = short.video_url?.includes('youtube.com') || short.video_url?.includes('youtu.be')
+  let embedUrl = null
+
+  if (isYouTube) {
+    const match = short.video_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/)
+    if (match) embedUrl = `https://www.youtube.com/embed/${match[1]}`
+  }
+
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div style={videoModal} onClick={(event) => event.stopPropagation()}>
+        <div style={videoModalHeader}>
+          <div>
+            <div style={sheetTitle}>{short.title}</div>
+            <div style={sheetSubtitle}>{short.domain} • {short.duration}</div>
+          </div>
+          <button onClick={onClose} style={closeButton}>X</button>
+        </div>
+
+        {embedUrl ? (
+          <div style={videoFrameShell}>
+            <iframe
+              src={embedUrl}
+              style={videoFrame}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        ) : short.video_url ? (
+          <video controls style={videoPlayer} src={short.video_url} />
+        ) : (
+          <div style={emptyVideoState}>
+            <img src={openMoji('1F4F9')} alt="" width="56" height="56" />
+            <div>Video not available yet.</div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const loadingShell = {
+  minHeight: '100vh',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: '#cfefff',
+  padding: 20,
+}
+
+const loadingCard = {
+  width: 'min(92vw, 360px)',
+  background: '#fff',
+  border: '4px solid #7dd3fc',
+  borderRadius: 28,
+  padding: 28,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 14,
+  boxShadow: '0 16px 0 rgba(14, 116, 144, 0.18)',
+}
+
+const screenShell = {
+  minHeight: '100vh',
+  background: '#bde7ff',
+  padding: '14px 12px 24px',
+  position: 'relative',
+  overflow: 'hidden',
+}
+
+const skyCloudLeft = {
+  position: 'absolute',
+  width: 190,
+  height: 72,
+  left: -10,
+  bottom: 84,
+  background: '#f7fbff',
+  borderRadius: 999,
+  opacity: 0.92,
+}
+
+const skyCloudRight = {
+  position: 'absolute',
+  width: 220,
+  height: 88,
+  right: -30,
+  top: 120,
+  background: '#f7fbff',
+  borderRadius: 999,
+  opacity: 0.7,
+}
+
+const appFrame = {
+  width: 'min(100%, 460px)',
+  minHeight: 'calc(100vh - 28px)',
+  margin: '0 auto',
+  background: '#f8fbff',
+  border: '4px solid #8b5cf6',
+  borderRadius: 34,
+  overflow: 'hidden',
+  position: 'relative',
+  boxShadow: '0 28px 50px rgba(15, 23, 42, 0.16)',
+}
+
+const headerBar = {
+  background: '#7755d9',
+  color: '#fff',
+  padding: '14px 14px 12px',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 12,
+}
+
+const brandStack = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+}
+
+const brandBadge = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  fontWeight: 900,
+  fontSize: 16,
+}
+
+const pageTitle = {
+  fontSize: 28,
+  fontWeight: 900,
+  lineHeight: 1,
+  letterSpacing: -0.5,
+}
+
+const headerChips = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+}
+
+const statPill = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '6px 10px',
+  background: '#5b3ec6',
+  border: '2px solid rgba(255,255,255,0.2)',
+  borderRadius: 999,
+  fontWeight: 800,
+  fontSize: 12,
+}
+
+const avatarBubble = {
+  borderRadius: '50%',
+  border: '3px solid #ffffff',
+  background: '#fff',
+}
+
+const contentShell = {
+  padding: '16px 14px 94px',
+  minHeight: 'calc(100vh - 142px)',
+  overflowY: 'auto',
+}
+
+const tabStack = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 14,
+}
+
+const panelBase = {
+  border: '3px solid',
+  borderRadius: 28,
+  padding: 18,
+  boxShadow: '0 12px 0 rgba(15, 23, 42, 0.08)',
+}
+
+const stack12 = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+}
+
+const stack16 = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 16,
+}
+
+const statusStrip = {
+  width: '100%',
+  background: '#f08c55',
+  color: '#fff',
+  border: '3px solid #d86d36',
+  borderRadius: 22,
+  padding: '12px 14px',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 10,
+  flexWrap: 'wrap',
+}
+
+const statusDots = {
+  display: 'flex',
+  gap: 6,
+}
+
+const statusDot = {
+  width: 12,
+  height: 12,
+  borderRadius: '50%',
+}
+
+const heroTitle = {
+  fontSize: 44,
+  lineHeight: 1,
+  fontWeight: 900,
+  color: '#ffffff',
+  textShadow: '0 3px 0 rgba(37, 99, 235, 0.22)',
+}
+
+const heroSubtitle = {
+  fontSize: 18,
+  fontWeight: 800,
+  color: '#eff6ff',
+}
+
+const avatarGrid = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: 12,
+  width: '100%',
+}
+
+const avatarChoice = {
+  background: '#ffffff',
+  border: '3px solid #ffffff',
+  borderRadius: 22,
+  padding: 10,
+  boxShadow: '0 8px 0 rgba(37, 99, 235, 0.15)',
+}
+
+const avatarChoiceImage = {
+  width: '100%',
+  height: 'auto',
+  borderRadius: 16,
+  background: '#fff7ed',
+}
+
+const avatarLabel = {
+  marginTop: 8,
+  fontSize: 12,
+  fontWeight: 800,
+  color: '#334155',
+}
+
+const playButton = {
+  border: '3px solid #4d9b14',
+  background: '#84cc16',
+  color: '#fff',
+  borderRadius: 999,
+  padding: '14px 36px',
+  fontSize: 24,
+  fontWeight: 900,
+  cursor: 'pointer',
+  boxShadow: '0 10px 0 rgba(77, 155, 20, 0.28)',
+}
+
+const sectionTitle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  fontSize: 24,
+  fontWeight: 900,
+  color: '#22314a',
+}
+
+const cardGrid = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(0, 1fr))',
+  gap: 12,
+}
+
+const softCard = {
+  border: '3px solid #ffffff',
+  borderRadius: 24,
+  padding: 14,
+  boxShadow: '0 10px 0 rgba(15, 23, 42, 0.08)',
+  cursor: 'pointer',
+}
+
+const shortCardColors = ['#fff7d6', '#e0f2fe', '#ffe4ef']
+
+const shortHeader = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
+}
+
+const badgeStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '6px 10px',
+  borderRadius: 999,
+  background: '#ffffff',
+  color: '#334155',
+  fontWeight: 800,
+  fontSize: 12,
+}
+
+const xpChip = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '6px 10px',
+  borderRadius: 999,
+  background: '#fee2e2',
+  color: '#b91c1c',
+  fontWeight: 800,
+  fontSize: 12,
+}
+
+const shortTitle = {
+  marginTop: 14,
+  fontSize: 17,
+  fontWeight: 900,
+  color: '#243b53',
+  ...textClamp(2),
+}
+
+const shortMeta = {
+  marginTop: 18,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  fontSize: 13,
+  fontWeight: 800,
+  color: '#475569',
+}
+
+const pathScrollArea = {
+  position: 'relative',
+  padding: '10px 0 16px',
+}
+
+const pathTrunk = {
+  position: 'absolute',
+  top: 10,
+  bottom: 10,
+  left: '50%',
+  transform: 'translateX(-50%)',
+  width: 22,
+  background: '#8b5a2b',
+  borderRadius: 999,
+}
+
+const pathNodeCard = {
+  position: 'relative',
+  width: '76%',
+  border: '3px solid #a56a2f',
+  borderRadius: 24,
+  padding: 14,
+  background: '#dca76b',
+  boxShadow: '0 10px 0 rgba(120, 53, 15, 0.2)',
+  marginBottom: 20,
+}
+
+const pathCardLeft = {
+  marginRight: 'auto',
+}
+
+const pathCardRight = {
+  marginLeft: 'auto',
+}
+
+const pathNodeTop = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 10,
+}
+
+const pathTier = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '5px 10px',
+  borderRadius: 999,
+  background: '#fff7ed',
+  color: '#9a3412',
+  fontSize: 12,
+  fontWeight: 900,
+}
+
+const pathNodeTitleRow = {
+  marginTop: 14,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+}
+
+const moduleEmojiBubble = {
+  width: 54,
+  height: 54,
+  borderRadius: 18,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: '#fff7ed',
+  border: '2px solid #fcd34d',
+  fontSize: 18,
+  fontWeight: 900,
+  color: '#7c2d12',
+  flexShrink: 0,
+}
+
+const pathNodeTitle = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: '#3f2209',
+}
+
+const pathNodeMeta = {
+  marginTop: 4,
+  fontSize: 12,
+  fontWeight: 700,
+  color: '#7c4b1c',
+}
+
+const progressCounterRow = {
+  width: '100%',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: 10,
+}
+
+const miniCounter = {
+  background: '#5e89e8',
+  border: '2px solid rgba(255,255,255,0.25)',
+  borderRadius: 18,
+  padding: '10px 8px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+}
+
+const achievementGrid = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: 12,
+}
+
+const achievementColors = ['#eadcff', '#fff2b8', '#ffd9cc', '#d9f0ff']
+
+const achievementCard = {
+  borderRadius: 24,
+  padding: 14,
+  border: '3px solid #fff',
+  textAlign: 'center',
+  boxShadow: '0 10px 0 rgba(15, 23, 42, 0.08)',
+}
+
+const achievementLabel = {
+  marginTop: 10,
+  fontWeight: 900,
+  color: '#334155',
+}
+
+const battleCard = {
+  background: '#fff7ed',
+  border: '3px solid #fdba74',
+  borderRadius: 26,
+  padding: 18,
+  boxShadow: '0 10px 0 rgba(194, 65, 12, 0.08)',
+}
+
+const battleQuestion = {
+  fontSize: 22,
+  lineHeight: 1.2,
+  fontWeight: 900,
+  color: '#7c2d12',
+}
+
+const battleChoiceRow = {
+  marginTop: 16,
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: 12,
+}
+
+const battleButton = {
+  border: '3px solid #f97316',
+  background: '#fff',
+  color: '#9a3412',
+  borderRadius: 20,
+  padding: '14px 10px',
+  fontWeight: 900,
+  fontSize: 16,
+  cursor: 'pointer',
+}
+
+const battleResult = {
+  marginTop: 16,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+}
+
+const battlePicked = {
+  fontWeight: 900,
+  color: '#0f766e',
+}
+
+const battleHint = {
+  fontWeight: 700,
+  color: '#475569',
+}
+
+const friendsRow = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+  gap: 10,
+}
+
+const friendBubble = {
+  background: '#dbeafe',
+  border: '3px solid #fff',
+  borderRadius: 22,
+  padding: 10,
+  textAlign: 'center',
+  boxShadow: '0 8px 0 rgba(59, 130, 246, 0.12)',
+}
+
+const friendAvatar = {
+  borderRadius: '50%',
+  background: '#fff',
+}
+
+const friendName = {
+  display: 'block',
+  marginTop: 8,
+  fontSize: 12,
+  fontWeight: 900,
+  color: '#334155',
+}
+
+const ladderStack = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 10,
+  paddingBottom: 12,
+}
+
+const ladderColors = ['#d6bcfa', '#fed7aa', '#fde68a', '#bfdbfe', '#d9f99d']
+
+const ladderStep = {
+  minHeight: 78,
+  border: '3px solid',
+  borderRadius: 28,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '12px 16px',
+  boxShadow: '0 10px 0 rgba(120, 53, 15, 0.12)',
+}
+
+const ladderStepText = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+}
+
+const ladderTierLabel = {
+  fontSize: 12,
+  fontWeight: 900,
+  color: '#7c2d12',
+}
+
+const ladderRankName = {
+  fontSize: 17,
+  fontWeight: 900,
+  color: '#4a2c12',
+}
+
+const ladderAvatar = {
+  borderRadius: '50%',
+  background: '#fff',
+  border: '3px solid #fff',
+}
+
+const profileAvatar = {
+  borderRadius: '50%',
+  background: '#fff',
+  border: '4px solid #fff',
+  boxShadow: '0 12px 0 rgba(59, 130, 246, 0.15)',
+}
+
+const profileName = {
+  fontSize: 28,
+  fontWeight: 900,
+  color: '#1e3a8a',
+}
+
+const profileRank = {
+  fontSize: 16,
+  fontWeight: 800,
+  color: '#334155',
+}
+
+const profileStatsGrid = {
+  width: '100%',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: 10,
+}
+
+const profileStatCard = {
+  background: '#ffffff',
+  border: '3px solid #dbeafe',
+  borderRadius: 20,
+  padding: '12px 10px',
+  textAlign: 'center',
+}
+
+const profileStatValue = {
+  fontSize: 20,
+  fontWeight: 900,
+  color: '#0f172a',
+}
+
+const profileStatLabel = {
+  marginTop: 4,
+  fontSize: 12,
+  fontWeight: 800,
+  color: '#64748b',
+}
+
+const logoutButton = {
+  border: '3px solid #dc2626',
+  background: '#ef4444',
+  color: '#fff',
+  borderRadius: 20,
+  padding: '14px 18px',
+  fontWeight: 900,
+  fontSize: 18,
+  cursor: 'pointer',
+  boxShadow: '0 10px 0 rgba(220, 38, 38, 0.2)',
+}
+
+const bottomTabs = {
+  position: 'absolute',
+  left: 10,
+  right: 10,
+  bottom: 10,
+  background: '#ffffff',
+  border: '3px solid #dbeafe',
+  borderRadius: 26,
+  padding: 8,
+  display: 'grid',
+  gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+  gap: 8,
+}
+
+const tabButton = {
+  border: '2px solid transparent',
+  borderRadius: 18,
+  padding: '8px 4px',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 6,
+  cursor: 'pointer',
+}
+
+const tabButtonLabel = {
+  fontSize: 11,
+  fontWeight: 900,
+}
+
+const overlay = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(15, 23, 42, 0.42)',
+  display: 'flex',
+  alignItems: 'flex-end',
+  justifyContent: 'center',
+  padding: 12,
+  zIndex: 50,
+}
+
+const sheet = {
+  width: 'min(100%, 460px)',
+  background: '#fff',
+  borderRadius: '28px 28px 22px 22px',
+  padding: 18,
+  boxShadow: '0 28px 60px rgba(15, 23, 42, 0.2)',
+}
+
+const sheetHandle = {
+  width: 76,
+  height: 8,
+  borderRadius: 999,
+  background: '#dbeafe',
+  margin: '0 auto 18px',
+}
+
+const sheetTitleRow = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+}
+
+const sheetTitle = {
+  fontSize: 22,
+  fontWeight: 900,
+  color: '#22314a',
+}
+
+const sheetSubtitle = {
+  marginTop: 4,
+  fontSize: 13,
+  fontWeight: 800,
+  color: '#64748b',
+}
+
+const sheetInfoGrid = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: 10,
+  marginTop: 18,
+}
+
+const sheetDescription = {
+  marginTop: 18,
+  marginBottom: 18,
+  fontSize: 15,
+  lineHeight: 1.55,
+  color: '#475569',
+}
+
+const primarySheetButton = {
+  width: '100%',
+  border: '3px solid #4d9b14',
+  background: '#84cc16',
+  color: '#fff',
+  borderRadius: 18,
+  padding: '14px 16px',
+  fontSize: 18,
+  fontWeight: 900,
+  cursor: 'pointer',
+}
+
+const videoModal = {
+  width: 'min(100%, 760px)',
+  background: '#fff',
+  borderRadius: 28,
+  padding: 18,
+  boxShadow: '0 28px 60px rgba(15, 23, 42, 0.2)',
+}
+
+const videoModalHeader = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 12,
+  marginBottom: 14,
+}
+
+const closeButton = {
+  border: 'none',
+  background: '#e2e8f0',
+  color: '#334155',
+  width: 38,
+  height: 38,
+  borderRadius: '50%',
+  fontWeight: 900,
+  cursor: 'pointer',
+}
+
+const videoFrameShell = {
+  position: 'relative',
+  paddingBottom: '56.25%',
+  height: 0,
+}
+
+const videoFrame = {
+  position: 'absolute',
+  inset: 0,
+  width: '100%',
+  height: '100%',
+  border: 'none',
+  borderRadius: 18,
+}
+
+const videoPlayer = {
+  width: '100%',
+  borderRadius: 18,
+}
+
+const emptyVideoState = {
+  minHeight: 220,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 14,
+  color: '#64748b',
+  fontWeight: 800,
 }
