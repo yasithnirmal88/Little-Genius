@@ -213,6 +213,7 @@ const quizTopRow = {
   justifyContent: 'space-between',
   alignItems: 'center',
   gap: 12,
+  flexWrap: 'wrap',
 }
 
 const quizLabelWrap = {
@@ -222,7 +223,7 @@ const quizLabelWrap = {
 }
 
 const quizTitle = {
-  fontSize: 22,
+  fontSize: 'clamp(20px, 6vw, 22px)',
   lineHeight: 1.05,
   fontWeight: 900,
   color: '#22314a',
@@ -271,7 +272,7 @@ const questionCard = {
 }
 
 const questionText = {
-  fontSize: 24,
+  fontSize: 'clamp(20px, 6vw, 24px)',
   lineHeight: 1.2,
   fontWeight: 900,
   color: '#7c2d12',
@@ -287,7 +288,7 @@ const answerStack = {
 const answerButton = {
   width: '100%',
   display: 'flex',
-  alignItems: 'center',
+  alignItems: 'flex-start',
   gap: 12,
   padding: '14px 14px',
   border: '3px solid',
@@ -316,7 +317,7 @@ const answerText = {
 
 const actionRow = {
   display: 'flex',
-  justifyContent: 'flex-end',
+  justifyContent: 'center',
 }
 
 const primaryButton = {
@@ -352,7 +353,7 @@ const resultPanel = {
   background: '#ffffff',
   border: '3px solid #dbeafe',
   borderRadius: 28,
-  padding: 24,
+  padding: 'clamp(18px, 5vw, 24px)',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',

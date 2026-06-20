@@ -271,8 +271,8 @@ const heroWrap = {
   width: 'min(1120px, 100%)',
   margin: '0 auto',
   display: 'grid',
-  gridTemplateColumns: 'minmax(0, 1.05fr) minmax(320px, 0.95fr)',
-  gap: 24,
+  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
+  gap: 'clamp(18px, 4vw, 24px)',
   alignItems: 'center',
   position: 'relative',
   zIndex: 1,
@@ -325,6 +325,7 @@ const primaryButton = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
+  flex: '1 1 210px',
   border: '3px solid #4d9b14',
   background: '#84cc16',
   color: '#fff',
@@ -339,6 +340,7 @@ const secondaryButton = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
+  flex: '1 1 210px',
   border: '3px solid #93c5fd',
   background: '#fff',
   color: '#1d4ed8',
@@ -350,7 +352,7 @@ const secondaryButton = {
 
 const miniStats = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
   gap: 12,
   maxWidth: 620,
 }
@@ -400,6 +402,7 @@ const phoneHeader = {
   justifyContent: 'space-between',
   alignItems: 'center',
   gap: 10,
+  flexWrap: 'wrap',
 }
 
 const phoneBrand = {
@@ -440,6 +443,7 @@ const previewTopRow = {
   justifyContent: 'space-between',
   alignItems: 'center',
   gap: 10,
+  flexWrap: 'wrap',
 }
 
 const previewMission = {
@@ -466,7 +470,7 @@ const previewStars = {
 
 const previewTitle = {
   margin: '16px 0 0',
-  fontSize: 52,
+  fontSize: 'clamp(36px, 10vw, 52px)',
   lineHeight: 1,
   fontWeight: 900,
   color: '#fff',
@@ -535,6 +539,7 @@ const sectionTitleRow = {
   display: 'flex',
   alignItems: 'center',
   gap: 10,
+  flexWrap: 'wrap',
 }
 
 const sectionTitle = {
@@ -546,7 +551,7 @@ const sectionTitle = {
 
 const stepGrid = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
   gap: 14,
   marginTop: 16,
 }
@@ -576,7 +581,7 @@ const stepText = {
 
 const featureGrid = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
   gap: 14,
   marginTop: 16,
 }
@@ -634,13 +639,14 @@ const ctaWrap = {
   justifyContent: 'space-between',
   alignItems: 'center',
   gap: 20,
+  flexWrap: 'wrap',
   boxShadow: '0 12px 0 rgba(245, 158, 11, 0.08)',
   position: 'relative',
   zIndex: 1,
 }
 
 const ctaTitle = {
-  fontSize: 30,
+  fontSize: 'clamp(24px, 6vw, 30px)',
   fontWeight: 900,
   color: '#7c2d12',
 }

@@ -95,6 +95,8 @@ export default function AdminPage() {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
+        gap: 8,
+        flexWrap: 'wrap',
         flexShrink: 0,
       }}>
         <div>
@@ -166,7 +168,7 @@ export default function AdminPage() {
       </div>
 
       {/* Bottom Nav */}
-      <div style={{ background: 'white', borderTop: '1px solid #eee', display: 'flex', flexShrink: 0 }}>
+      <div style={{ background: 'white', borderTop: '1px solid #eee', display: 'flex', flexShrink: 0, overflowX: 'auto' }}>
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -182,6 +184,7 @@ export default function AdminPage() {
               alignItems: 'center',
               gap: 2,
               color: tab === t.id ? '#2d3436' : '#aaa',
+              minWidth: 72,
             }}
           >
             <span style={{ fontSize: 'clamp(16px, 3vw, 22px)' }}>{t.icon}</span>

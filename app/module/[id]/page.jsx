@@ -560,6 +560,7 @@ const headerTop = {
   justifyContent: 'space-between',
   alignItems: 'center',
   gap: 10,
+  flexWrap: 'wrap',
 }
 
 const brandBadge = {
@@ -615,7 +616,7 @@ const backButton = {
 }
 
 const moduleTitle = {
-  fontSize: 30,
+  fontSize: 'clamp(24px, 8vw, 30px)',
   lineHeight: 1,
   fontWeight: 900,
 }
@@ -628,10 +629,11 @@ const moduleHeaderMeta = {
   fontSize: 13,
   fontWeight: 800,
   color: '#ede9fe',
+  flexWrap: 'wrap',
 }
 
 const contentShell = {
-  padding: '16px 14px 22px',
+  padding: 'clamp(14px, 4vw, 16px) clamp(12px, 3vw, 14px) 22px',
   minHeight: 'calc(100vh - 172px)',
   overflowY: 'auto',
 }
@@ -641,6 +643,7 @@ const footerBar = {
 }
 
 const primaryButton = {
+  width: 'min(100%, 280px)',
   border: '3px solid #4d9b14',
   background: '#84cc16',
   color: '#fff',
@@ -672,7 +675,7 @@ const stack16 = {
 const heroPanel = {
   border: '3px solid',
   borderRadius: 28,
-  padding: 22,
+  padding: 'clamp(18px, 5vw, 22px)',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
@@ -682,8 +685,8 @@ const heroPanel = {
 }
 
 const heroIconWrap = {
-  width: 120,
-  height: 120,
+  width: 'clamp(92px, 28vw, 120px)',
+  height: 'clamp(92px, 28vw, 120px)',
   borderRadius: '50%',
   background: '#ffffff',
   display: 'flex',
@@ -693,19 +696,19 @@ const heroIconWrap = {
 }
 
 const heroEmoji = {
-  fontSize: 72,
+  fontSize: 'clamp(54px, 16vw, 72px)',
   lineHeight: 1,
 }
 
 const heroTitle = {
-  fontSize: 38,
+  fontSize: 'clamp(30px, 9vw, 38px)',
   lineHeight: 1,
   fontWeight: 900,
   color: '#fff',
 }
 
 const heroText = {
-  fontSize: 17,
+  fontSize: 'clamp(15px, 4.5vw, 17px)',
   lineHeight: 1.55,
   fontWeight: 700,
   color: '#eff6ff',
@@ -747,7 +750,7 @@ const infoStrip = {
   borderRadius: 22,
   padding: 14,
   display: 'flex',
-  alignItems: 'center',
+  alignItems: 'flex-start',
   gap: 12,
 }
 
@@ -772,15 +775,17 @@ const stepBanner = {
   justifyContent: 'space-between',
   alignItems: 'center',
   gap: 12,
+  flexWrap: 'wrap',
 }
 
 const stepBannerTitle = {
   display: 'flex',
   alignItems: 'center',
   gap: 10,
-  fontSize: 24,
+  fontSize: 'clamp(20px, 6vw, 24px)',
   fontWeight: 900,
   color: '#22314a',
+  flexWrap: 'wrap',
 }
 
 const stepStarBadge = {
@@ -824,7 +829,7 @@ const videoPlayer = {
 }
 
 const emptyCard = {
-  minHeight: 220,
+  minHeight: 180,
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
@@ -836,7 +841,7 @@ const emptyCard = {
 
 const actionRow = {
   display: 'flex',
-  justifyContent: 'flex-end',
+  justifyContent: 'center',
 }
 
 const knowledgeCard = {
@@ -861,7 +866,7 @@ const quizShell = {
   background: '#ffffff',
   border: '3px solid #dbeafe',
   borderRadius: 26,
-  padding: 16,
+  padding: 'clamp(12px, 3vw, 16px)',
   boxShadow: '0 10px 0 rgba(15, 23, 42, 0.06)',
 }
 
@@ -874,7 +879,7 @@ const battlePanel = {
 }
 
 const battleQuestion = {
-  fontSize: 28,
+  fontSize: 'clamp(22px, 7vw, 28px)',
   lineHeight: 1.15,
   fontWeight: 900,
   color: '#7c2d12',
@@ -890,7 +895,7 @@ const battleHelper = {
 
 const battleChoiceRow = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
   gap: 12,
   marginTop: 18,
 }

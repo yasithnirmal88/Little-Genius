@@ -693,6 +693,7 @@ const headerBar = {
   justifyContent: 'space-between',
   alignItems: 'center',
   gap: 12,
+  flexWrap: 'wrap',
 }
 
 const brandStack = {
@@ -710,7 +711,7 @@ const brandBadge = {
 }
 
 const pageTitle = {
-  fontSize: 28,
+  fontSize: 'clamp(24px, 8vw, 28px)',
   fontWeight: 900,
   lineHeight: 1,
   letterSpacing: -0.5,
@@ -741,7 +742,7 @@ const avatarBubble = {
 }
 
 const contentShell = {
-  padding: '16px 14px 94px',
+  padding: 'clamp(14px, 4vw, 16px) clamp(12px, 3vw, 14px) 94px',
   minHeight: 'calc(100vh - 142px)',
   overflowY: 'auto',
 }
@@ -797,7 +798,7 @@ const statusDot = {
 }
 
 const heroTitle = {
-  fontSize: 44,
+  fontSize: 'clamp(32px, 10vw, 44px)',
   lineHeight: 1,
   fontWeight: 900,
   color: '#ffffff',
@@ -805,14 +806,14 @@ const heroTitle = {
 }
 
 const heroSubtitle = {
-  fontSize: 18,
+  fontSize: 'clamp(16px, 4.8vw, 18px)',
   fontWeight: 800,
   color: '#eff6ff',
 }
 
 const avatarGrid = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(92px, 1fr))',
   gap: 12,
   width: '100%',
 }
@@ -855,14 +856,15 @@ const sectionTitle = {
   display: 'flex',
   alignItems: 'center',
   gap: 10,
-  fontSize: 24,
+  fontSize: 'clamp(20px, 6vw, 24px)',
   fontWeight: 900,
   color: '#22314a',
+  flexWrap: 'wrap',
 }
 
 const cardGrid = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
   gap: 12,
 }
 
@@ -1014,7 +1016,7 @@ const pathNodeMeta = {
 const progressCounterRow = {
   width: '100%',
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(88px, 1fr))',
   gap: 10,
 }
 
@@ -1030,7 +1032,7 @@ const miniCounter = {
 
 const achievementGrid = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
   gap: 12,
 }
 
@@ -1059,7 +1061,7 @@ const battleCard = {
 }
 
 const battleQuestion = {
-  fontSize: 22,
+  fontSize: 'clamp(18px, 6vw, 22px)',
   lineHeight: 1.2,
   fontWeight: 900,
   color: '#7c2d12',
@@ -1068,7 +1070,7 @@ const battleQuestion = {
 const battleChoiceRow = {
   marginTop: 16,
   display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
   gap: 12,
 }
 
@@ -1102,7 +1104,7 @@ const battleHint = {
 
 const friendsRow = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(76px, 1fr))',
   gap: 10,
 }
 
@@ -1181,7 +1183,7 @@ const profileAvatar = {
 }
 
 const profileName = {
-  fontSize: 28,
+  fontSize: 'clamp(24px, 7vw, 28px)',
   fontWeight: 900,
   color: '#1e3a8a',
 }
@@ -1195,7 +1197,7 @@ const profileRank = {
 const profileStatsGrid = {
   width: '100%',
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(88px, 1fr))',
   gap: 10,
 }
 
@@ -1243,7 +1245,7 @@ const bottomTabs = {
   padding: 8,
   display: 'grid',
   gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
-  gap: 8,
+  gap: 4,
 }
 
 const tabButton = {
@@ -1258,7 +1260,7 @@ const tabButton = {
 }
 
 const tabButtonLabel = {
-  fontSize: 11,
+  fontSize: 10,
   fontWeight: 900,
 }
 
@@ -1310,7 +1312,7 @@ const sheetSubtitle = {
 
 const sheetInfoGrid = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))',
   gap: 10,
   marginTop: 18,
 }
@@ -1349,6 +1351,7 @@ const videoModalHeader = {
   alignItems: 'center',
   gap: 12,
   marginBottom: 14,
+  flexWrap: 'wrap',
 }
 
 const closeButton = {

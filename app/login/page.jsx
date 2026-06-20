@@ -269,13 +269,13 @@ const brandRow = {
 
 const headerTitle = {
   marginTop: 10,
-  fontSize: 34,
+  fontSize: 'clamp(28px, 9vw, 34px)',
   lineHeight: 1,
   fontWeight: 900,
 }
 
 const contentShell = {
-  padding: '16px 14px 18px',
+  padding: 'clamp(14px, 4vw, 18px)',
   display: 'flex',
   flexDirection: 'column',
   gap: 14,
@@ -295,6 +295,7 @@ const avatarRow = {
   justifyContent: 'center',
   gap: 12,
   marginBottom: 12,
+  flexWrap: 'wrap',
 }
 
 const avatarBubble = {
@@ -304,7 +305,7 @@ const avatarBubble = {
 }
 
 const welcomeTitle = {
-  fontSize: 38,
+  fontSize: 'clamp(30px, 10vw, 38px)',
   lineHeight: 1,
   fontWeight: 900,
   color: '#fff',
@@ -327,7 +328,7 @@ const formCard = {
 
 const modeTabs = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
   gap: 8,
   marginBottom: 14,
 }
@@ -374,6 +375,7 @@ const errorBox = {
 }
 
 const primaryButton = {
+  width: '100%',
   border: '3px solid #4d9b14',
   background: '#84cc16',
   color: '#fff',
