@@ -22,6 +22,7 @@ const TAB_ITEMS = [
   { id: 'home', label: 'Home', icon: '1F31F' },
   { id: 'path', label: 'Learn', icon: '1F333' },
   { id: 'progress', label: 'Progress', icon: '1F3C6' },
+  { id: 'leaderboard', label: 'Leaderboard', icon: '1F3C5' },
   { id: 'ranks', label: 'Ranks', icon: '1F451' },
   { id: 'me', label: 'Me', icon: '1F9D1' },
 ]
@@ -91,15 +92,13 @@ export default function DashboardPage() {
   const [selectedModule, setSelectedModule] = useState(null)
   const [selectedShort, setSelectedShort] = useState(null)
   const [battleChoice, setBattleChoice] = useState(null)
-  const [xpBubbles, setXpBubbles] = useState([])
-
-  const triggerFloatingXp = (amount) => {
-    const id = Date.now() + Math.random()
-    setXpBubbles((prev) => [...prev, { id, amount }])
-    setTimeout(() => {
-      setXpBubbles((prev) => prev.filter((b) => b.id !== id))
-    }, 1200)
-  }
+  const [battles, setBattles] = useState([])
+  const [leaderboard, setLeaderboard] = useState([])
+  const [currentRank, setCurrentRank] = useState(null)
+  const [watchedShortIds, setWatchedShortIds] = useState(new Set())
+  const [dailyChallenge, setDailyChallenge] = useState(null)
+  const [dailyAnswered, setDailyAnswered] = useState(false)
+  const [watchHistory, setWatchHistory] = useState([])
 
   useEffect(() => {
     loadData()
@@ -117,70 +116,44 @@ export default function DashboardPage() {
 
     const { data: prof } = await supabase.from('users').select('*').eq('auth_id', authUser.id).single()
     setProfile(prof)
-
-    // Streak Tracking: on dashboard load, check daily_logs for today, insert if missing, increment users.streak
-    if (prof) {
-      try {
-        const todayStr = new Date().toLocaleDateString('en-CA')
-        const { data: logToday, error: logErr } = await supabase
-          .from('daily_logs')
-          .select('*')
-          .eq('user_id', prof.id)
-          .eq('activity_date', todayStr)
-          .maybeSingle()
-
-        if (logErr) {
-          console.warn('daily_logs table may not exist yet or RLS error:', logErr)
-        } else if (!logToday) {
-          // Log is missing for today. Let's check yesterday to see if we should increment or reset streak.
-          const yesterday = new Date()
-          yesterday.setDate(yesterday.getDate() - 1)
-          const yesterdayStr = yesterday.toLocaleDateString('en-CA')
-
-          const { data: logYesterday } = await supabase
-            .from('daily_logs')
-            .select('*')
-            .eq('user_id', prof.id)
-            .eq('activity_date', yesterdayStr)
-            .maybeSingle()
-
-          let newStreak = 1
-          if (logYesterday) {
-            newStreak = (prof.streak || 0) + 1
-          }
-
-          // Insert daily log for today
-          await supabase
-            .from('daily_logs')
-            .insert({ user_id: prof.id, activity_date: todayStr })
-
-          // Update streak in users
-          await supabase
-            .from('users')
-            .update({ streak: newStreak })
-            .eq('id', prof.id)
-
-          prof.streak = newStreak
-          setProfile({ ...prof, streak: newStreak })
-
-          // Check/Award badges for streak
-          const { checkAndAwardBadges } = await import('@/lib/badges')
-          await checkAndAwardBadges(supabase, prof.id)
-        }
-      } catch (err) {
-        console.error('Error tracking streak:', err)
-      }
-    }
+    localStorage.setItem('username', prof.username)
 
     const { data: mods } = await supabase.from('modules').select('*').eq('status', 'published').order('sort_order', { ascending: true })
     const { data: ls } = await supabase.from('lessons').select('*').order('step_number')
     const { data: qs } = await supabase.from('quizzes').select('*, quiz_questions(*)')
     const { data: sh } = await supabase.from('shorts').select('*').eq('status', 'published')
+    const { data: bat } = await supabase.from('battles').select('*')
+    const { data: topUsers } = await supabase.from('users').select('id, username, xp, rank').order('xp', { ascending: false }).limit(20)
+    const { count: usersAbove } = await supabase.from('users').select('id', { count: 'exact', head: true }).gt('xp', prof.xp)
+    const { data: watched } = await supabase.from('user_shorts').select('short_id').eq('user_id', prof.id)
 
     setModules(mods || [])
     setLessons(ls || [])
     setQuizzes(qs || [])
     setShorts(sh || [])
+    setBattles(bat || [])
+    setLeaderboard(topUsers || [])
+    setCurrentRank((usersAbove || 0) + 1)
+    setWatchedShortIds(new Set((watched || []).map((item) => item.short_id)))
+
+    const today = new Date().toISOString().split('T')[0]
+    const stored = localStorage.getItem('daily-challenge-' + today)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      setDailyChallenge(parsed.challenge)
+      setDailyAnswered(parsed.answered)
+    } else if (qs && qs.length > 0) {
+      const allQuestions = qs.flatMap((q) => (q.quiz_questions || []))
+      if (allQuestions.length > 0) {
+        const random = allQuestions[Math.floor(Math.random() * allQuestions.length)]
+        setDailyChallenge(random)
+        localStorage.setItem('daily-challenge-' + today, JSON.stringify({ challenge: random, answered: false }))
+      }
+    }
+
+    const historyStr = localStorage.getItem('watch-history')
+    const history = historyStr ? JSON.parse(historyStr) : []
+    setWatchHistory(history.slice(0, 5))
 
     const progressMap = {}
     if (prof) {
@@ -216,6 +189,47 @@ export default function DashboardPage() {
     router.refresh()
   }
 
+  const handleShortCompletion = async (shortId) => {
+    if (!profile || watchedShortIds.has(shortId)) return
+
+    const xpEarned = 10
+    const newXp = (profile.xp || 0) + xpEarned
+
+    await supabase.from('user_shorts').upsert(
+      { user_id: profile.id, short_id: shortId },
+      { onConflict: 'user_id,short_id' }
+    )
+
+    await supabase.from('users').update({ xp: newXp }).eq('id', profile.id)
+    setProfile((prev) => ({ ...prev, xp: newXp }))
+    setWatchedShortIds((prev) => new Set(prev).add(shortId))
+
+    const shortData = shorts.find((s) => s.id === shortId)
+    if (shortData) {
+      const historyStr = localStorage.getItem('watch-history')
+      const history = historyStr ? JSON.parse(historyStr) : []
+      const newHistory = [
+        { id: shortData.id, title: shortData.title, domain: shortData.domain, watchedAt: new Date().toISOString() },
+        ...history.filter((h) => h.id !== shortId),
+      ].slice(0, 5)
+      localStorage.setItem('watch-history', JSON.stringify(newHistory))
+      setWatchHistory(newHistory)
+    }
+  }
+
+  const handleDailyAnswer = async (isCorrect) => {
+    if (!dailyChallenge || dailyAnswered) return
+    if (isCorrect) {
+      const bonusXp = 15
+      const newXp = (profile.xp || 0) + bonusXp
+      await supabase.from('users').update({ xp: newXp }).eq('id', profile.id)
+      setProfile((prev) => ({ ...prev, xp: newXp }))
+    }
+    setDailyAnswered(true)
+    const today = new Date().toISOString().split('T')[0]
+    localStorage.setItem('daily-challenge-' + today, JSON.stringify({ challenge: dailyChallenge, answered: true }))
+  }
+
   if (loading) {
     return (
       <div style={loadingShell}>
@@ -232,6 +246,7 @@ export default function DashboardPage() {
   const currentRankIndex = rankIndex(profile?.rank)
   const featuredShorts = shorts.slice(0, 3)
   const nextModules = modules.slice(0, 6)
+  const dashboardBattle = battles.find((battle) => battle.module_id === getUnlockedModule(modules, progress, unlockedMods)?.id) || battles[0] || null
 
   return (
     <div style={screenShell}>
@@ -250,10 +265,14 @@ export default function DashboardPage() {
             <HomeTab
               profile={profile}
               featuredShorts={featuredShorts}
+              dailyChallenge={dailyChallenge}
+              dailyAnswered={dailyAnswered}
+              onDailyAnswer={handleDailyAnswer}
               onPickShort={setSelectedShort}
               onPlay={() => {
                 if (firstModule) router.push(`/module/${firstModule.id}`)
               }}
+              watchHistory={watchHistory}
             />
           )}
 
@@ -271,14 +290,17 @@ export default function DashboardPage() {
               profile={profile}
               completedModules={completedModules}
               modules={modules.length}
+              battle={dashboardBattle}
               battleChoice={battleChoice}
               onBattlePick={setBattleChoice}
             />
           )}
 
+          {tab === 'leaderboard' && <LeaderboardTab leaderboard={leaderboard} profile={profile} currentRank={currentRank} />}
+
           {tab === 'ranks' && <RanksTab profile={profile} />}
 
-          {tab === 'me' && <ProfileTab profile={profile} onLogout={handleLogout} />}
+          {tab === 'me' && <ProfileTab profile={profile} onLogout={handleLogout} onUpdateAvatar={(url) => setProfile((p) => ({ ...p, avatar_url: url }))} />}
         </div>
 
         <BottomTabs activeTab={tab} onChange={setTab} />
@@ -299,67 +321,10 @@ export default function DashboardPage() {
         <ShortPlayer
           short={selectedShort}
           onClose={() => setSelectedShort(null)}
-          onComplete={async () => {
-            if (!profile) return
-            try {
-              // Check if already watched to avoid double XP exploit
-              const watchedList = JSON.parse(localStorage.getItem('shorts_watched') || '[]')
-              if (!watchedList.includes(selectedShort.id)) {
-                watchedList.push(selectedShort.id)
-                localStorage.setItem('shorts_watched', JSON.stringify(watchedList))
-
-                const newXp = (profile.xp || 0) + 10
-                await supabase
-                  .from('users')
-                  .update({ xp: newXp })
-                  .eq('id', profile.id)
-
-                setProfile((p) => ({ ...p, xp: newXp }))
-
-                // Check badges & rank upgrades
-                const { checkAndAwardBadges } = await import('@/lib/badges')
-                const { checkAndUpgradeRank } = await import('@/lib/ranks')
-                await checkAndAwardBadges(supabase, profile.id, { shorts_watched: watchedList.length })
-                
-                const upgradedRank = await checkAndUpgradeRank(supabase, profile.id, newXp)
-                if (upgradedRank) {
-                  setProfile((p) => ({ ...p, rank: upgradedRank }))
-                }
-
-                // Trigger floating XP animation
-                triggerFloatingXp(10)
-              }
-            } catch (err) {
-              console.error('Error completing short:', err)
-            }
-            setSelectedShort(null)
-          }}
+          onWatched={handleShortCompletion}
+          alreadyWatched={watchedShortIds.has(selectedShort.id)}
         />
       )}
-
-      {xpBubbles.map((b) => (
-        <div
-          key={b.id}
-          className="xp-bubble"
-          style={{
-            position: 'fixed',
-            left: '50%',
-            bottom: '25%',
-            background: 'linear-gradient(135deg, #FFD700, #FFA500)',
-            color: 'white',
-            fontWeight: 800,
-            fontSize: '18px',
-            padding: '8px 16px',
-            borderRadius: '20px',
-            boxShadow: '0 4px 15px rgba(255, 215, 0, 0.4)',
-            zIndex: 1000,
-            border: '2px solid white',
-            transform: 'translateX(-50%)',
-          }}
-        >
-          +{b.amount} XP ✨
-        </div>
-      ))}
     </div>
   )
 }
@@ -384,7 +349,7 @@ function HeaderBar({ profile, title, avatarSeed }) {
   )
 }
 
-function HomeTab({ profile, featuredShorts, onPickShort, onPlay }) {
+function HomeTab({ profile, featuredShorts, dailyChallenge, dailyAnswered, onDailyAnswer, onPickShort, onPlay, watchHistory }) {
   const selectedAvatar = getProfileSeed(profile)
 
   return (
@@ -412,6 +377,30 @@ function HomeTab({ profile, featuredShorts, onPickShort, onPlay }) {
           </button>
         </div>
       </Panel>
+
+      {dailyChallenge && (
+        <>
+          <SectionTitle icon="1F929" label="Daily Challenge" />
+          <DailyChallenge challenge={dailyChallenge} answered={dailyAnswered} onAnswer={onDailyAnswer} />
+        </>
+      )}
+
+      {watchHistory.length > 0 && (
+        <>
+          <SectionTitle icon="1F4FA" label="Recently Watched" />
+          <div style={cardGrid}>
+            {watchHistory.map((short) => (
+              <div key={short.id} style={{ ...softCard, textAlign: 'left', background: '#fce7f3', opacity: 0.8 }}>
+                <div style={shortHeader}>
+                  <Badge label={short.domain} />
+                  <span style={{ fontSize: 11, color: '#666' }}>Watched</span>
+                </div>
+                <div style={shortTitle}>{short.title}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <SectionTitle icon="1F39E" label="Featured Shorts" />
       <div style={cardGrid}>
@@ -474,9 +463,43 @@ function PathTab({ modules, progress, unlockedMods, onOpenModule }) {
   )
 }
 
-function ProgressTab({ profile, completedModules, modules, battleChoice, onBattlePick }) {
+function LeaderboardTab({ leaderboard, profile, currentRank }) {
+  return (
+    <div style={tabStack}>
+      <SectionTitle icon="1F3C5" label="Top 20 Spark Leaders" />
+      <div style={leaderboardCard}>
+        {leaderboard.length === 0 ? (
+          <div style={emptyStateText}>No leaderboard data available yet.</div>
+        ) : (
+          leaderboard.map((user, index) => {
+            const isCurrent = user.id === profile.id
+            return (
+              <div key={user.id} style={{ ...leaderboardRow, background: isCurrent ? '#fffbeb' : '#fff' }}>
+                <span style={leaderboardRank}>{index + 1}</span>
+                <div style={leaderboardUserInfo}>
+                  <span style={leaderboardUsername}>{user.username}</span>
+                  <span style={leaderboardSubtext}>{user.rank}</span>
+                </div>
+                <span style={leaderboardXp}>{user.xp?.toLocaleString() ?? '0'} XP</span>
+              </div>
+            )
+          })
+        )}
+      </div>
+      {currentRank != null && (
+        <div style={leaderboardFooter}>Your Rank: {currentRank}</div>
+      )}
+    </div>
+  )
+}
+
+function ProgressTab({ profile, completedModules, modules, battle, battleChoice, onBattlePick }) {
   const profileRank = profile?.rank || RANKS[0]
   const levelNumber = rankIndex(profileRank) + 1
+
+  const battleOptions = battle?.options || ['Alive', 'Not Alive']
+  const explanation = battle?.explanation || 'Great job. Now compare the evidence from both sides.'
+  const answerText = battle?.correct_answer
 
   return (
     <div style={tabStack}>
@@ -506,16 +529,24 @@ function ProgressTab({ profile, completedModules, modules, battleChoice, onBattl
 
       <SectionTitle icon="2694" label="Science Battle" />
       <div style={battleCard}>
-        <div style={battleQuestion}>Is a virus alive or not alive?</div>
+        <div style={battleQuestion}>{battle?.question || 'Choose a science challenge and defend your choice.'}</div>
+        <div style={battleHelper}>{battle ? `Module ${battle.module_id} battle` : 'Pick your answer to earn XP.'}</div>
         {!battleChoice ? (
           <div style={battleChoiceRow}>
-            <button onClick={() => onBattlePick('Alive')} style={battleButton}>Alive</button>
-            <button onClick={() => onBattlePick('Not Alive')} style={battleButton}>Not Alive</button>
+            {battleOptions.map((option) => (
+              <button key={option} onClick={() => onBattlePick(option)} style={battleButton}>{option}</button>
+            ))}
           </div>
         ) : (
           <div style={battleResult}>
             <div style={battlePicked}>You picked: {battleChoice}</div>
-            <div style={battleHint}>Great job. Now compare the evidence from both sides.</div>
+            <div style={battleHint}>
+              {answerText
+                ? battleChoice === answerText
+                  ? `Correct! ${explanation}`
+                  : `Nice try. The right answer is ${answerText}. ${explanation}`
+                : explanation}
+            </div>
           </div>
         )}
       </div>
@@ -562,7 +593,52 @@ function RanksTab({ profile }) {
   )
 }
 
-function ProfileTab({ profile, onLogout }) {
+function DailyChallenge({ challenge, answered, onAnswer }) {
+  const isCorrect = (optionIdx) => optionIdx === challenge.correct_index
+  const options = challenge.options || []
+
+  return (
+    <div style={challengeCard}>
+      <div style={challengeQuestion}>{challenge.question_text || 'What is your answer?'}</div>
+      <div style={challengeHelper}>{answered ? 'Come back tomorrow for a new challenge!' : 'Answer now for +15 XP bonus!'}</div>
+      {!answered && (
+        <div style={challengeOptions}>
+          {options.map((option, idx) => (
+            <button
+              key={idx}
+              onClick={() => onAnswer(isCorrect(idx))}
+              disabled={answered}
+              style={{
+                ...challengeOptionBtn,
+                opacity: answered ? 0.5 : 1,
+              }}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      )}
+      {answered && (
+        <div style={challengeFeedback}>
+          <img src={openMoji('2705')} alt="" width="32" height="32" />
+          Challenge answered! Check back tomorrow.
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProfileTab({ profile, onLogout, onUpdateAvatar }) {
+  const avatarSeeds = ['Alek', 'Liam', 'Nova', 'Maya', 'Ivy', 'Kai', 'Zara', 'Sage', 'River', 'Fox']
+  const selectedSeed = getProfileSeed(profile)
+
+  const updateAvatar = async (seed) => {
+    const { error } = await createClient().from('users').update({ avatar_url: seed }).eq('id', profile.id)
+    if (!error && onUpdateAvatar) {
+      onUpdateAvatar(seed)
+    }
+  }
+
   return (
     <div style={tabStack}>
       <Panel color="#8ec5ff" border="#6197d8">
@@ -578,6 +654,27 @@ function ProfileTab({ profile, onLogout }) {
           </div>
         </div>
       </Panel>
+
+      <SectionTitle icon="1F9E0" label="Choose Your Avatar" />
+      <div style={avatarPickerGrid}>
+        {avatarSeeds.map((seed) => {
+          const isSelected = selectedSeed.toLowerCase().includes(seed.toLowerCase())
+          return (
+            <button
+              key={seed}
+              onClick={() => updateAvatar(seed)}
+              style={{
+                ...avatarPickerItem,
+                borderColor: isSelected ? '#8b5cf6' : '#e5e7eb',
+                borderWidth: isSelected ? '3px' : '1px',
+              }}
+            >
+              <img src={dicebear(seed, 'ffd5dc')} alt={seed} width="72" height="72" />
+              <div style={{ fontSize: 10, fontWeight: 500, marginTop: 4 }}>{seed}</div>
+            </button>
+          )
+        })}
+      </div>
 
       <button onClick={onLogout} style={logoutButton}>
         Log Out
@@ -706,18 +803,24 @@ function ModuleSheet({ mod, stars, lessonCount, quizCount, onClose, onStart }) {
   )
 }
 
-function ShortPlayer({ short, onClose, onComplete }) {
+function ShortPlayer({ short, onClose, onWatched, alreadyWatched }) {
+  const [watched, setWatched] = useState(alreadyWatched)
   const isYouTube = short.video_url?.includes('youtube.com') || short.video_url?.includes('youtu.be')
   let embedUrl = null
+
+  useEffect(() => {
+    setWatched(alreadyWatched)
+  }, [alreadyWatched])
 
   if (isYouTube) {
     const match = short.video_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/)
     if (match) embedUrl = `https://www.youtube.com/embed/${match[1]}?enablejsapi=1`
   }
 
-  const handleFinish = () => {
-    if (onComplete) onComplete()
-    else onClose()
+  const handleWatched = async () => {
+    if (watched) return
+    await onWatched(short.id)
+    setWatched(true)
   }
 
   return (
@@ -732,48 +835,32 @@ function ShortPlayer({ short, onClose, onComplete }) {
         </div>
 
         {embedUrl ? (
-          <div style={videoFrameShell}>
-            <iframe
-              id="ytplayer"
-              src={embedUrl}
-              style={videoFrame}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
+          <>
+            <div style={videoFrameShell}>
+              <iframe
+                src={embedUrl}
+                style={videoFrame}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+            <button onClick={handleWatched} style={primarySheetButton} disabled={watched}>
+              {watched ? 'XP Awarded' : 'Mark as watched to earn +10 XP'}
+            </button>
+          </>
         ) : short.video_url ? (
-          <video 
-            controls 
-            autoPlay
-            onEnded={handleFinish}
-            style={videoPlayer} 
-            src={short.video_url} 
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <video controls style={videoPlayer} src={short.video_url} onEnded={handleWatched} />
+            <button onClick={handleWatched} style={primarySheetButton} disabled={watched}>
+              {watched ? 'XP Awarded' : 'Mark as watched to earn +10 XP'}
+            </button>
+          </div>
         ) : (
           <div style={emptyVideoState}>
             <img src={openMoji('1F4F9')} alt="" width="56" height="56" />
             <div>Video not available yet.</div>
           </div>
         )}
-
-        <button 
-          onClick={handleFinish} 
-          style={{
-            marginTop: 14,
-            width: '100%',
-            border: '3px solid #047857',
-            background: '#10b981',
-            color: '#fff',
-            borderRadius: 20,
-            padding: '12px 16px',
-            fontSize: 16,
-            fontWeight: 900,
-            cursor: 'pointer',
-            boxShadow: '0 8px 0 rgba(4, 120, 87, 0.15)',
-          }}
-        >
-          ✓ Done Watching! (+10 XP)
-        </button>
       </div>
     </div>
   )
@@ -799,6 +886,62 @@ const loadingCard = {
   alignItems: 'center',
   gap: 14,
   boxShadow: '0 16px 0 rgba(14, 116, 144, 0.18)',
+}
+
+const leaderboardCard = {
+  width: '100%',
+  maxWidth: 760,
+  display: 'grid',
+  gap: 12,
+  padding: 20,
+  borderRadius: 24,
+  background: '#ffffff',
+  border: '1px solid #e2e8f0',
+}
+
+const leaderboardRow = {
+  display: 'grid',
+  gridTemplateColumns: '42px 1fr auto',
+  gap: 16,
+  alignItems: 'center',
+  padding: '14px 16px',
+  borderRadius: 18,
+  border: '1px solid #eef2ff',
+}
+
+const leaderboardRank = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: '#2563eb',
+}
+
+const leaderboardUserInfo = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+}
+
+const leaderboardUsername = {
+  fontSize: 15,
+  fontWeight: 700,
+}
+
+const leaderboardSubtext = {
+  fontSize: 13,
+  color: '#64748b',
+}
+
+const leaderboardXp = {
+  fontSize: 15,
+  fontWeight: 700,
+  whiteSpace: 'nowrap',
+}
+
+const leaderboardFooter = {
+  marginTop: 12,
+  textAlign: 'right',
+  fontSize: 14,
+  color: '#475569',
 }
 
 const screenShell = {
@@ -1225,6 +1368,14 @@ const battleQuestion = {
   color: '#7c2d12',
 }
 
+const battleHelper = {
+  marginTop: 8,
+  fontSize: 15,
+  lineHeight: 1.5,
+  color: '#9a3412',
+  fontWeight: 700,
+}
+
 const battleChoiceRow = {
   marginTop: 16,
   display: 'grid',
@@ -1402,7 +1553,7 @@ const bottomTabs = {
   borderRadius: 26,
   padding: 8,
   display: 'grid',
-  gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
   gap: 4,
 }
 
@@ -1552,4 +1703,73 @@ const emptyVideoState = {
   gap: 14,
   color: '#64748b',
   fontWeight: 800,
+}
+
+const challengeCard = {
+  background: '#fef3c7',
+  border: '2px solid #f59e0b',
+  borderRadius: 16,
+  padding: 16,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+}
+
+const challengeQuestion = {
+  fontSize: 18,
+  fontWeight: 700,
+  color: '#b45309',
+}
+
+const challengeHelper = {
+  fontSize: 13,
+  color: '#d97706',
+  fontWeight: 600,
+}
+
+const challengeOptions = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr',
+  gap: 10,
+}
+
+const challengeOptionBtn = {
+  background: '#fcd34d',
+  border: '2px solid #f59e0b',
+  borderRadius: 10,
+  padding: '10px 12px',
+  fontSize: 13,
+  fontWeight: 600,
+  color: '#78350f',
+  cursor: 'pointer',
+}
+
+const challengeFeedback = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  fontSize: 14,
+  fontWeight: 600,
+  color: '#16a34a',
+}
+
+const avatarPickerGrid = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(5, 1fr)',
+  gap: 12,
+  width: '100%',
+  marginBottom: 16,
+}
+
+const avatarPickerItem = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 6,
+  padding: 8,
+  background: '#ffffff',
+  border: '1px solid #e5e7eb',
+  borderRadius: 12,
+  cursor: 'pointer',
+  transition: 'all 0.2s',
 }

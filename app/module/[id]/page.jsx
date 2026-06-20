@@ -5,7 +5,6 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import QuizEngine from '@/components/QuizEngine'
-import confetti from 'canvas-confetti'
 
 function openMoji(hex) {
   return `https://raw.githubusercontent.com/hfg-gmuend/openmoji/master/color/svg/${hex}.svg`
@@ -27,6 +26,7 @@ export default function ModuleFlowPage() {
   const [mod, setMod] = useState(null)
   const [lessons, setLessons] = useState([])
   const [quizzes, setQuizzes] = useState([])
+  const [battle, setBattle] = useState(null)
   const [progress, setProgress] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -34,15 +34,6 @@ export default function ModuleFlowPage() {
   const [battleChoice, setBattleChoice] = useState(null)
   const [saving, setSaving] = useState(false)
   const [steps, setSteps] = useState([])
-  const [xpBubbles, setXpBubbles] = useState([])
-
-  const triggerFloatingXp = (amount) => {
-    const id = Date.now() + Math.random()
-    setXpBubbles((prev) => [...prev, { id, amount }])
-    setTimeout(() => {
-      setXpBubbles((prev) => prev.filter((b) => b.id !== id))
-    }, 1200)
-  }
 
   useEffect(() => {
     loadData()
@@ -93,9 +84,11 @@ export default function ModuleFlowPage() {
 
     const { data: lessonData } = await supabase.from('lessons').select('*').eq('module_id', id).order('step_number')
     const { data: quizData } = await supabase.from('quizzes').select('*, quiz_questions(*)').eq('module_id', id)
+    const { data: battleData } = await supabase.from('battles').select('*').eq('module_id', id).maybeSingle()
 
     setLessons(lessonData || [])
     setQuizzes(quizData || [])
+    setBattle(battleData || null)
 
     if (prof) {
       const { data: pr } = await supabase.from('user_progress').select('*').eq('user_id', prof.id).eq('module_id', id).single()
@@ -151,10 +144,7 @@ export default function ModuleFlowPage() {
     const step = currentStep
     if (step && (step.type === 'video' || step.type === 'knowledge')) {
       setSaving(true)
-      const isAlreadyDone = progress?.steps_completed?.includes(stepIdx)
       const completedSteps = [...new Set([...(progress?.steps_completed || []), stepIdx])]
-      const xpEarned = isAlreadyDone ? 0 : 5
-
       const payload = {
         user_id: profile.id,
         module_id: Number(id),
@@ -164,23 +154,6 @@ export default function ModuleFlowPage() {
       }
       await supabase.from('user_progress').upsert(payload, { onConflict: 'user_id,module_id' })
       setProgress((prev) => ({ ...(prev || {}), ...payload }))
-
-      if (xpEarned > 0 && profile) {
-        const newXp = (profile.xp || 0) + xpEarned
-        await supabase.from('users').update({ xp: newXp }).eq('id', profile.id)
-        setProfile((prev) => ({ ...prev, xp: newXp }))
-
-        const { checkAndUpgradeRank } = await import('@/lib/ranks')
-        const upgradedRank = await checkAndUpgradeRank(supabase, profile.id, newXp)
-        if (upgradedRank) {
-          setProfile((prev) => ({ ...prev, rank: upgradedRank }))
-        }
-
-        const { checkAndAwardBadges } = await import('@/lib/badges')
-        await checkAndAwardBadges(supabase, profile.id)
-
-        triggerFloatingXp(xpEarned)
-      }
       setSaving(false)
     }
 
@@ -192,20 +165,13 @@ export default function ModuleFlowPage() {
     setSaving(true)
 
     const completedSteps = [...(progress?.steps_completed || []), stepIdx]
-    
-    // Determine module completion
-    const isCompleted = (Math.max(earnedStars, update?.stars || 0) >= 3)
-    const wasAlreadyCompleted = progress?.completed || false
-    const newlyCompleted = isCompleted && !wasAlreadyCompleted
-
     const payload = {
       user_id: profile.id,
       module_id: Number(id),
       stars: Math.max(earnedStars, update?.stars || 0),
       steps_completed: [...new Set(completedSteps)],
-      quiz_scores: update?.quiz_scores || progress?.quiz_scores || [],
-      completed: isCompleted,
-      ...(newlyCompleted ? { completed_at: new Date().toISOString() } : {})
+      quiz_scores: progress?.quiz_scores || [],
+      ...(update?.xp ? { completed: earnedStars + (update?.stars || 0) >= 3 } : {}),
     }
 
     if (progress?.id) {
@@ -215,37 +181,11 @@ export default function ModuleFlowPage() {
       if (data) setProgress(data)
     }
 
-    let newXp = profile.xp || 0
-    let modulesCompletedVal = profile.modules_completed || 0
-
     if (update?.xp) {
-      newXp = (profile.xp || 0) + update.xp
-      triggerFloatingXp(update.xp)
-    }
-
-    if (newlyCompleted) {
-      modulesCompletedVal = modulesCompletedVal + 1
-    }
-
-    if (update?.xp || newlyCompleted) {
-      await supabase
-        .from('users')
-        .update({ 
-          xp: newXp, 
-          modules_completed: modulesCompletedVal 
-        })
-        .eq('id', profile.id)
-
-      setProfile((prev) => ({ ...prev, xp: newXp, modules_completed: modulesCompletedVal }))
-
-      const { checkAndUpgradeRank } = await import('@/lib/ranks')
-      const upgradedRank = await checkAndUpgradeRank(supabase, profile.id, newXp)
-      if (upgradedRank) {
-        setProfile((prev) => ({ ...prev, rank: upgradedRank }))
-      }
-
-      const { checkAndAwardBadges } = await import('@/lib/badges')
-      await checkAndAwardBadges(supabase, profile.id)
+      const newXp = (profile.xp || 0) + update.xp
+      const completedCount = earnedStars + (update?.stars || 0) >= 3 ? (profile.modules_completed || 0) + 1 : profile.modules_completed
+      await supabase.from('users').update({ xp: newXp, modules_completed: completedCount }).eq('id', profile.id)
+      setProfile((prev) => ({ ...prev, xp: newXp, modules_completed: completedCount }))
     }
 
     setProgress((prev) => ({ ...(prev || {}), ...payload }))
@@ -256,19 +196,7 @@ export default function ModuleFlowPage() {
     if (result.passed) {
       const newStars = Math.min(earnedStars + 1, 3)
       const xpEarned = (currentStep.star <= 2 ? 15 : 25) + (result.score === 100 ? 10 : 0)
-      
-      const existingScores = progress?.quiz_scores || []
-      const quizId = currentStep.quiz.id
-      const matchIdx = existingScores.findIndex(q => q.quiz_id === quizId)
-      const newScoreObj = { quiz_id: quizId, score: result.score, passed: true }
-      let updatedScores = [...existingScores]
-      if (matchIdx >= 0) {
-        updatedScores[matchIdx] = { ...updatedScores[matchIdx], ...newScoreObj }
-      } else {
-        updatedScores.push(newScoreObj)
-      }
-
-      await saveProgress({ stars: newStars, xp: xpEarned, quiz_scores: updatedScores })
+      await saveProgress({ stars: newStars, xp: xpEarned })
     }
   }
 
@@ -278,12 +206,7 @@ export default function ModuleFlowPage() {
   }
 
   const handleCompleteModule = async () => {
-    const passedQuizzes = quizzes.filter(q => {
-      const result = quizResults[q.id]
-      return result?.passed || progress?.quiz_scores?.some(s => s.quiz_id === q.id && s.passed)
-    }).length
-    const finalStars = Math.min(passedQuizzes, 3)
-    await saveProgress({ stars: finalStars, xp: 0 })
+    await saveProgress({ stars: 3, xp: 0 })
     goBack()
   }
 
@@ -358,7 +281,7 @@ export default function ModuleFlowPage() {
               />
             </div>
           )}
-          {currentStep?.type === 'battle' && <BattleStep choice={battleChoice} onVote={handleBattleVote} onNext={goNext} />}
+          {currentStep?.type === 'battle' && <BattleStep battle={battle} choice={battleChoice} onVote={handleBattleVote} onNext={goNext} />}
           {currentStep?.type === 'complete' && <CompleteStep mod={mod} earnedStars={earnedStars} onFinish={handleCompleteModule} />}
         </div>
 
@@ -374,30 +297,6 @@ export default function ModuleFlowPage() {
           <div style={savingCard}>Saving your progress...</div>
         </div>
       )}
-
-      {xpBubbles.map((b) => (
-        <div
-          key={b.id}
-          className="xp-bubble"
-          style={{
-            position: 'fixed',
-            left: '50%',
-            bottom: '25%',
-            background: 'linear-gradient(135deg, #FFD700, #FFA500)',
-            color: 'white',
-            fontWeight: 800,
-            fontSize: '18px',
-            padding: '8px 16px',
-            borderRadius: '20px',
-            boxShadow: '0 4px 15px rgba(255, 215, 0, 0.4)',
-            zIndex: 1000,
-            border: '2px solid white',
-            transform: 'translateX(-50%)',
-          }}
-        >
-          +{b.amount} XP ✨
-        </div>
-      ))}
     </div>
   )
 }
@@ -469,6 +368,23 @@ function VideoStep({ lesson, star, onNext }) {
 }
 
 function KnowledgeStep({ lesson, star, onNext }) {
+  const [isPlaying, setIsPlaying] = useState(false)
+
+  const handleSpeak = () => {
+    if (isPlaying) {
+      window.speechSynthesis.cancel()
+      setIsPlaying(false)
+    } else {
+      const utterance = new SpeechSynthesisUtterance(lesson.knowledge_text || 'Knowledge notes will appear here.')
+      utterance.rate = 0.9
+      utterance.pitch = 1
+      utterance.volume = 1
+      utterance.onend = () => setIsPlaying(false)
+      window.speechSynthesis.speak(utterance)
+      setIsPlaying(true)
+    }
+  }
+
   return (
     <div style={stack16}>
       <StepBanner star={star} title="What You Learned" icon="1F4DA" color="#dcfce7" border="#86efac" />
@@ -481,34 +397,47 @@ function KnowledgeStep({ lesson, star, onNext }) {
       </div>
 
       <div style={actionRow}>
+        <button onClick={handleSpeak} style={{ ...primaryButton, background: isPlaying ? '#ef4444' : '#84cc16' }}>
+          {isPlaying ? 'Stop' : '🔊 Read Aloud'}
+        </button>
+      </div>
+
+      <div style={actionRow}>
         <button onClick={onNext} style={primaryButton}>Ready for Quiz</button>
       </div>
     </div>
   )
 }
 
-function BattleStep({ choice, onVote, onNext }) {
+function BattleStep({ battle, choice, onVote, onNext }) {
+  const options = battle?.options || ['Alive', 'Not Alive']
+  const question = battle?.question || 'Is a virus alive or not alive?'
+  const answerText = battle?.correct_answer
+  const explanation = battle?.explanation || 'Choose a side and compare the evidence.'
+
   return (
     <div style={stack16}>
       <StepBanner star={3} title="Science Battle" icon="2694" color="#ffedd5" border="#fdba74" />
 
       <div style={battlePanel}>
-        <div style={battleQuestion}>Is a virus alive or not alive?</div>
-        <div style={battleHelper}>Choose a side, then compare the evidence.</div>
+        <div style={battleQuestion}>{question}</div>
+        <div style={battleHelper}>{battle ? `Battle for module ${battle.module_id}` : 'Choose a side, then compare the evidence.'}</div>
 
         {!choice ? (
           <div style={battleChoiceRow}>
-            <button onClick={() => onVote('Alive')} style={battleChoiceButton}>Alive</button>
-            <button onClick={() => onVote('Not Alive')} style={battleChoiceButton}>Not Alive</button>
+            {options.map((option) => (
+              <button key={option} onClick={() => onVote(option)} style={battleChoiceButton}>{option}</button>
+            ))}
           </div>
         ) : (
           <div style={battleAnswerStack}>
             <div style={battleResultCard}>You picked: {choice}</div>
-            <div style={evidenceCard}>
-              <strong>Alive:</strong> Viruses evolve and adapt over time.
-            </div>
-            <div style={evidenceCard}>
-              <strong>Not alive:</strong> They cannot survive without a host.
+            <div style={battleHint}>
+              {answerText
+                ? choice === answerText
+                  ? `Correct! ${explanation}`
+                  : `Nice try. The right answer is ${answerText}. ${explanation}`
+                : explanation}
             </div>
             <button onClick={onNext} style={primaryButton}>Continue</button>
           </div>
@@ -519,15 +448,63 @@ function BattleStep({ choice, onVote, onNext }) {
 }
 
 function CompleteStep({ mod, earnedStars, onFinish }) {
-  useEffect(() => {
-    if (earnedStars >= 3) {
-      confetti({
-        particleCount: 150,
-        spread: 80,
-        origin: { y: 0.6 }
-      })
+  const canvasRef = useCallback((canvas) => {
+    if (!canvas || earnedStars < 3) return
+    const ctx = canvas.getContext('2d')
+    const width = 800
+    const height = 600
+    canvas.width = width
+    canvas.height = height
+
+    ctx.fillStyle = '#fff9e6'
+    ctx.fillRect(0, 0, width, height)
+    ctx.strokeStyle = '#fbbf24'
+    ctx.lineWidth = 8
+    ctx.strokeRect(20, 20, width - 40, height - 40)
+
+    ctx.fillStyle = '#1f2937'
+    ctx.font = 'bold 48px serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('Certificate of Achievement', width / 2, 100)
+
+    ctx.font = '24px serif'
+    ctx.fillStyle = '#4b5563'
+    ctx.fillText('This is to certify that', width / 2, 160)
+
+    ctx.font = 'bold 36px serif'
+    ctx.fillStyle = '#1f2937'
+    ctx.fillText(localStorage.getItem('username') || 'Young Scientist', width / 2, 230)
+
+    ctx.font = '24px serif'
+    ctx.fillStyle = '#4b5563'
+    ctx.fillText('has successfully completed the module', width / 2, 290)
+
+    ctx.font = 'bold 32px serif'
+    ctx.fillStyle = '#d97706'
+    ctx.fillText(mod.title, width / 2, 360)
+
+    ctx.font = '20px serif'
+    ctx.fillStyle = '#4b5563'
+    ctx.fillText('and earned all 3 stars', width / 2, 420)
+
+    ctx.font = '48px serif'
+    ctx.fillStyle = '#f59e0b'
+    ctx.fillText('★ ★ ★', width / 2, 490)
+
+    ctx.font = '14px serif'
+    ctx.fillStyle = '#6b7280'
+    ctx.fillText(`Date: ${new Date().toLocaleDateString()}`, width / 2, 550)
+  }, [mod, earnedStars])
+
+  const downloadCertificate = () => {
+    const canvas = document.getElementById('cert-canvas')
+    if (canvas) {
+      const link = document.createElement('a')
+      link.href = canvas.toDataURL('image/png')
+      link.download = `${mod.title}-certificate.png`
+      link.click()
     }
-  }, [earnedStars])
+  }
 
   return (
     <div style={stack16}>
@@ -542,6 +519,14 @@ function CompleteStep({ mod, earnedStars, onFinish }) {
             : `You earned ${earnedStars}/3 stars so far. Come back to finish the mission.`}
         </div>
         <StarRow count={earnedStars} large />
+        {earnedStars >= 3 && (
+          <>
+            <canvas ref={canvasRef} id="cert-canvas" style={{ display: 'none' }} />
+            <button onClick={downloadCertificate} style={{ ...playButton, background: '#8b5cf6' }}>
+              📥 Download Certificate
+            </button>
+          </>
+        )}
         <button onClick={onFinish} style={playButton}>Back to Dashboard</button>
       </div>
     </div>

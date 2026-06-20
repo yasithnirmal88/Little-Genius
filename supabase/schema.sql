@@ -119,6 +119,31 @@ CREATE TABLE IF NOT EXISTS public.user_progress (
   UNIQUE(user_id, module_id)
 );
 
+-- 8.5. BATTLES & SHORT WATCH TRACKING
+CREATE TABLE IF NOT EXISTS public.battles (
+  id BIGSERIAL PRIMARY KEY,
+  module_id BIGINT NOT NULL REFERENCES public.modules(id) ON DELETE CASCADE,
+  question TEXT NOT NULL,
+  options JSONB NOT NULL DEFAULT '[]'::jsonb,
+  correct_answer TEXT NOT NULL,
+  explanation TEXT NOT NULL,
+  status content_status NOT NULL DEFAULT 'published',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.user_shorts (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  short_id BIGINT NOT NULL REFERENCES public.shorts(id) ON DELETE CASCADE,
+  watched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, short_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_battles_module ON public.battles(module_id);
+CREATE INDEX IF NOT EXISTS idx_user_shorts_user ON public.user_shorts(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_shorts_short ON public.user_shorts(short_id);
+
 -- 9. BADGES & USER BADGES
 CREATE TABLE IF NOT EXISTS public.badges (
   id BIGSERIAL PRIMARY KEY,
@@ -199,6 +224,8 @@ ALTER TABLE public.lessons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.quizzes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.quiz_questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.shorts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.battles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_shorts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.badges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_badges ENABLE ROW LEVEL SECURITY;
@@ -221,10 +248,21 @@ DROP POLICY IF EXISTS "Published shorts" ON public.shorts;
 CREATE POLICY "Published shorts" ON public.shorts
   FOR SELECT USING (status = 'published');
 
+DROP POLICY IF EXISTS "Published battles" ON public.battles;
+CREATE POLICY "Published battles" ON public.battles
+  FOR SELECT USING (status = 'published');
+
 -- Users can read their own data
 DROP POLICY IF EXISTS "Users read own data" ON public.users;
 CREATE POLICY "Users read own data" ON public.users
   FOR SELECT USING (auth.uid() = auth_id);
+DROP POLICY IF EXISTS "Public leaderboard users" ON public.users;
+CREATE POLICY "Public leaderboard users" ON public.users
+  FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Users update own profile" ON public.users;
+CREATE POLICY "Users update own profile" ON public.users
+  FOR UPDATE USING (auth.uid() = auth_id)
+  WITH CHECK (auth.uid() = auth_id);
 DROP POLICY IF EXISTS "Users read own progress" ON public.user_progress;
 CREATE POLICY "Users read own progress" ON public.user_progress
   FOR SELECT USING (EXISTS (SELECT 1 FROM public.users WHERE id = user_id AND auth_id = auth.uid()));
@@ -246,6 +284,12 @@ CREATE POLICY "Users read own daily_logs" ON public.daily_logs
   FOR SELECT USING (EXISTS (SELECT 1 FROM public.users WHERE id = user_id AND auth_id = auth.uid()));
 DROP POLICY IF EXISTS "Users insert own daily_logs" ON public.daily_logs;
 CREATE POLICY "Users insert own daily_logs" ON public.daily_logs
+  FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM public.users WHERE id = user_id AND auth_id = auth.uid()));
+DROP POLICY IF EXISTS "Users read own shorts" ON public.user_shorts;
+CREATE POLICY "Users read own shorts" ON public.user_shorts
+  FOR SELECT USING (EXISTS (SELECT 1 FROM public.users WHERE id = user_id AND auth_id = auth.uid()));
+DROP POLICY IF EXISTS "Users insert own shorts" ON public.user_shorts;
+CREATE POLICY "Users insert own shorts" ON public.user_shorts
   FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM public.users WHERE id = user_id AND auth_id = auth.uid()));
 
 -- Helper function to check if the current user is an admin without RLS recursion

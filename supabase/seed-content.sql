@@ -62,6 +62,16 @@ Stars come in different colors! Blue stars are the hottest, and red stars are th
       (quiz_id, 'Which planet is the biggest in our solar system?', '["Saturn","Neptune","Earth","Jupiter"]'::jsonb, 3, 4),
       (quiz_id, 'What do all planets do around the Sun?', '["Spin in place","Orbit (go around)","Move away","Stay still"]'::jsonb, 1, 5);
 
+    INSERT INTO public.battles (module_id, question, options, correct_answer, explanation, status)
+    VALUES (
+      mod_id,
+      'What makes a planet alive?',
+      '["Having water","Being round","Orbiting a star","Having moving parts"]'::jsonb,
+      'Having water',
+      'A planet is not alive in the same way organisms are, but water supports life conditions. This battle question helps you think as a scientist.',
+      'published'::content_status
+    );
+
     INSERT INTO public.quizzes (module_id, lesson_id, title, passing_score, max_attempts)
     VALUES (mod_id, (SELECT id FROM public.lessons WHERE module_id = mod_id AND step_number = 2), 'Stars & Constellations Quiz', 80, 3)
     RETURNING id INTO quiz_id;
@@ -118,7 +128,7 @@ BEGIN
     INSERT INTO public.lessons (module_id, step_number, title, video_url, knowledge_text)
     VALUES
       (mod_id, 1, 'Mammals & Birds',
-       'https://youtu.be/LGxmZqQBOdU',
+       'https://www.youtube.com/watch?v=TP1T9GDzWFk',
        'Animals are amazing! Let''s learn about two big groups: mammals and birds.
 
 MAMMALS:

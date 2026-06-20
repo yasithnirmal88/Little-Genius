@@ -36,7 +36,7 @@ export default function QuizEngine({ questions, onComplete, onContinue, passingS
       setSelected(null)
       setSubmitted(false)
     } else {
-      const finalAnswers = answers
+      const finalAnswers = [...answers, { questionIndex: idx, selected, correct: selected === q.correct_index }]
       const correctCount = finalAnswers.filter((item) => item.correct).length
       const score = Math.round((correctCount / questions.length) * 100)
       setFinished(true)
@@ -45,7 +45,7 @@ export default function QuizEngine({ questions, onComplete, onContinue, passingS
   }
 
   if (finished) {
-    const correctCount = answers.filter((item) => item.correct).length
+    const correctCount = answers.filter((item) => item.correct).length + (selected === q.correct_index ? 1 : 0)
     const score = Math.round((correctCount / questions.length) * 100)
     const passed = score >= passingScore
 
