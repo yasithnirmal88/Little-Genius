@@ -7,6 +7,12 @@ import { createClient } from '@/lib/supabase'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Btn } from '@/components/ui/Btn'
+import { useEditor, EditorContent } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+
+
+
+
 
 export default function AdminPage() {
   const router = useRouter()
@@ -434,6 +440,41 @@ function AdminModules({ supabase, modules, setModules }) {
   )
 }
 
+// ─── RICH TEXT EDITOR ──────────────────────────────────────────────────
+function TiptapEditor({ value, onChange }) {
+  const editor = useEditor({
+    extensions: [StarterKit],
+    content: value,
+    onUpdate: ({ editor }) => {
+      onChange(editor.getHTML())
+    },
+  })
+
+  // This ensures the editor updates when you click "Edit" on a different lesson
+  useEffect(() => {
+    if (editor && value !== editor.getHTML()) {
+      editor.commands.setContent(value || '')
+    }
+  }, [value, editor])
+
+  if (!editor) return null
+
+  return (
+    <div style={{ border: '1.5px solid #e0e0e0', borderRadius: 10, overflow: 'hidden', background: 'white' }}>
+      <div style={{ background: '#f5f5f5', padding: '8px', display: 'flex', gap: '8px', borderBottom: '1px solid #e0e0e0' }}>
+        <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} style={{ fontWeight: 'bold', padding: '4px 8px', background: editor.isActive('bold') ? '#ddd' : 'transparent', border: 'none', cursor: 'pointer', borderRadius: 4 }}>B</button>
+        <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} style={{ fontStyle: 'italic', padding: '4px 8px', background: editor.isActive('italic') ? '#ddd' : 'transparent', border: 'none', cursor: 'pointer', borderRadius: 4 }}>I</button>
+        <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} style={{ fontWeight: 'bold', padding: '4px 8px', background: editor.isActive('heading') ? '#ddd' : 'transparent', border: 'none', cursor: 'pointer', borderRadius: 4 }}>H3</button>
+      </div>
+      <div style={{ padding: '10px 12px', minHeight: '100px', cursor: 'text' }}>
+        <EditorContent editor={editor} />
+      </div>
+    </div>
+  )
+}
+
+
+
 // ─── ADMIN LESSONS ─────────────────────────────────────────────────────
 function AdminLessons({ supabase, lessons, setLessons, modules }) {
   const [editing, setEditing] = useState(null)
@@ -502,18 +543,15 @@ const del = async (id) => {
           </div>
           <Input value={form.title || ''} onChange={(v) => setForm((f) => ({ ...f, title: v }))} placeholder="Lesson title" />
           <Input value={form.video_url || ''} onChange={(v) => setForm((f) => ({ ...f, video_url: v }))} placeholder="Video URL (YouTube link)" />
-          <textarea
-            value={form.knowledge_text || ''}
-            onChange={(e) => setForm((f) => ({ ...f, knowledge_text: e.target.value }))}
-            placeholder="Knowledge text (what kids learn)"
-            style={{
-              border: '1.5px solid #e0e0e0', borderRadius: 10,
-              padding: '10px 12px', fontSize: 'clamp(12px, 2vw, 14px)',
-              outline: 'none', width: '100%', boxSizing: 'border-box',
-              minHeight: 100, resize: 'vertical',
-              fontFamily: 'inherit',
-            }}
-          />
+          
+          
+          <div style={{ width: '100%' }}>
+            <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px', fontWeight: 600 }}>Knowledge text:</div>
+            <TiptapEditor
+              value={form.knowledge_text || ''}
+              onChange={(newHtml) => setForm((f) => ({ ...f, knowledge_text: newHtml }))}
+            />
+          </div>
           <div style={{ display: 'flex', gap: 'clamp(6px, 1vw, 10px)' }}>
             <Btn onClick={save} color="#6c5ce7">Save</Btn>
             <Btn onClick={() => setShowForm(false)} color="#aaa" outline>Cancel</Btn>
